@@ -2,11 +2,14 @@ import asyncio
 import logging
 import uuid
 import json
+import base64
+from io import BytesIO
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.client.default import DefaultBotProperties
+from PIL import Image
 
 from config import Config
 from database import db
@@ -483,7 +486,148 @@ async def stop_generation(callback: types.CallbackQuery):
         await callback.message.edit_text("⏹️ Генерация остановлена", reply_markup=get_main_keyboard(lang))
     await callback.answer()
 
-# ========== ОБРАБОТКА СООБЩЕНИЙ ДЛЯ AI ==========
+# ========== ОБРАБОТКА МЕДИАФАЙЛОВ ==========
+async def process_image(message: types.Message):
+    """Обработка изображений"""
+    user = db.get_user(message.from_user.id)
+    if not user:
+        return
+    
+    # Проверяем поддерживает ли текущая модель изображения
+    current_model_supports_images = False
+    for category_models in Config.AI_MODELS.values():
+        for model in category_models:
+            if model['id'] == user['current_model']:
+                current_model_supports_images = model['supports_images']
+                break
+    
+    if not current_model_supports_images:
+        lang = user['language']
+        error_text = {
+            'ru': "❌ Текущая модель не поддерживает изображения",
+            'en': "❌ Current model doesn't support images"
+        }
+        await message.answer(error_text[lang])
+        return
+    
+    # Скачиваем изображение
+    file = await bot.get_file(message.photo[-1].file_id)
+    file_path = await bot.download_file(file.file_path)
+    
+    # Конвертируем в base64
+    image_data = base64.b64encode(file_path.read()).decode('utf-8')
+    
+    # Отправляем в AI
+    lang = user['language']
+    wait_text = {
+        'ru': "⏳ <b>Обработка изображения...</b>",
+        'en': "⏳ <b>Processing image...</b>"
+    }
+    
+    msg = await message.answer(wait_text[lang], reply_markup=get_stop_keyboard(lang))
+    active_generations[message.from_user.id] = True
+    
+    try:
+        # Отправляем изображение в AI
+        result = await routerai_service.send_message(
+            user['current_model'],
+            f"Опиши это изображение: {message.caption or 'Что изображено на картинке?'}",
+            extra_data={"image": image_data}
+        )
+        
+        if result['success'] and active_generations.get(message.from_user.id):
+            response_text = f"🤖 <b>Ответ AI:</b>\n\n{result['response']}"
+            await msg.edit_text(response_text, reply_markup=get_main_keyboard(lang))
+        
+    except Exception as e:
+        if active_generations.get(message.from_user.id):
+            error_text = {
+                'ru': "❌ <b>Ошибка обработки изображения</b>",
+                'en': "❌ <b>Image processing error</b>"
+            }
+            await msg.edit_text(error_text[lang], reply_markup=get_main_keyboard(lang))
+    
+    finally:
+        active_generations.pop(message.from_user.id, None)
+
+async def process_document(message: types.Message):
+    """Обработка документов"""
+    user = db.get_user(message.from_user.id)
+    if not user:
+        return
+    
+    lang = user['language']
+    await message.answer("📄 <b>Документы пока не поддерживаются</b>" if lang == 'ru' else "📄 <b>Documents not supported yet</b>")
+
+async def process_audio(message: types.Message):
+    """Обработка аудио"""
+    user = db.get_user(message.from_user.id)
+    if not user:
+        return
+    
+    # Проверяем поддерживает ли текущая модель аудио
+    current_model_supports_audio = False
+    for category_models in Config.AI_MODELS.values():
+        for model in category_models:
+            if model['id'] == user['current_model']:
+                current_model_supports_audio = model['supports_audio']
+                break
+    
+    if not current_model_supports_audio:
+        lang = user['language']
+        error_text = {
+            'ru': "❌ Текущая модель не поддерживает аудио",
+            'en': "❌ Current model doesn't support audio"
+        }
+        await message.answer(error_text[lang])
+        return
+    
+    lang = user['language']
+    await message.answer("🎵 <b>Аудио пока не поддерживается</b>" if lang == 'ru' else "🎵 <b>Audio not supported yet</b>")
+
+async def process_video(message: types.Message):
+    """Обработка видео"""
+    user = db.get_user(message.from_user.id)
+    if not user:
+        return
+    
+    # Проверяем поддерживает ли текущая модель видео
+    current_model_supports_video = False
+    for category_models in Config.AI_MODELS.values():
+        for model in category_models:
+            if model['id'] == user['current_model']:
+                current_model_supports_video = model['supports_video']
+                break
+    
+    if not current_model_supports_video:
+        lang = user['language']
+        error_text = {
+            'ru': "❌ Текущая модель не поддерживает видео",
+            'en': "❌ Current model doesn't support video"
+        }
+        await message.answer(error_text[lang])
+        return
+    
+    lang = user['language']
+    await message.answer("🎥 <b>Видео пока не поддерживается</b>" if lang == 'ru' else "🎥 <b>Video not supported yet</b>")
+
+# ========== ОБРАБОТКА СООБЩЕНИЙ ==========
+@dp.message(F.photo)
+async def handle_photo(message: types.Message):
+    await process_image(message)
+
+@dp.message(F.document)
+async def handle_document(message: types.Message):
+    await process_document(message)
+
+@dp.message(F.audio)
+async def handle_audio(message: types.Message):
+    await process_audio(message)
+
+@dp.message(F.video)
+async def handle_video(message: types.Message):
+    await process_video(message)
+
 @dp.message(F.text)
 async def handle_message(message: types.Message):
     user = db.get_user(message.from_user.id)
@@ -510,7 +654,7 @@ async def handle_message(message: types.Message):
     if user_id not in user_conversations:
         user_conversations[user_id] = []
     
-    # Добавляем новое сообщение в историю (ограничиваем историю последними 10 сообщениями)
+    # Добавляем новое сообщение в историю
     user_conversations[user_id].append({"role": "user", "content": message.text})
     if len(user_conversations[user_id]) > 10:
         user_conversations[user_id] = user_conversations[user_id][-10:]
@@ -529,7 +673,7 @@ async def handle_message(message: types.Message):
         result = await routerai_service.send_message(
             user['current_model'], 
             message.text,
-            user_conversations[user_id][:-1]  # Передаем историю без текущего сообщения
+            user_conversations[user_id][:-1]
         )
         
         if result['success'] and active_generations.get(user_id):
@@ -557,7 +701,7 @@ async def handle_message(message: types.Message):
     finally:
         active_generations.pop(user_id, None)
 
-# ========== ЗАПУСК БОТА (POLLING РЕЖИМ) ==========
+# ========== ЗАПУСК БОТА ==========
 async def main():
     logger.info("Starting bot in polling mode...")
     await dp.start_polling(bot, skip_updates=True)
