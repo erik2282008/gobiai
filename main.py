@@ -4,6 +4,7 @@ import uuid
 import json
 import base64
 import sqlite3
+import os
 from datetime import datetime, timedelta
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
@@ -16,144 +17,132 @@ from aiogram.types import (
     ReplyKeyboardRemove
 )
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 
 from config import Config
 from database import db
 from services.yookassa import yookassa_service
 from services.routerai import routerai_service
 
+# Увеличиваем таймауты для работы на Heroku/Koyeb
+os.environ['AIOHTTP_TIMEOUT'] = '60'
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-bot = Bot(token=Config.BOT_TOKEN, default=DefaultBotProperties(parse_mode='HTML'))
+# Создаем сессию с увеличенными таймаутами
+session = AiohttpSession(timeout=60)
+
+# Создаем бота с кастомной сессией
+bot = Bot(
+    token=Config.BOT_TOKEN, 
+    default=DefaultBotProperties(parse_mode='HTML'),
+    session=session
+)
+
 dp = Dispatcher()
 
 active_generations = {}
 user_conversations = {}
 
-# ========== ЮРИДИЧЕСКИЕ ДОКУМЕНТЫ (ПОЛНЫЕ) ==========
+# ========== ЮРИДИЧЕСКИЕ ДОКУМЕНТЫ ==========
 LEGAL_DOCUMENTS = {
-    'privacy_policy': """
+    'privacy': """
 🔒 <b>ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ GobiAI Bot</b>
 
 <b>1. ОБЩИЕ ПОЛОЖЕНИЯ</b>
-1.1. Настоящая Политика конфиденциальности регулирует отношения между Администрацией сервиса GobiAI Bot и Пользователем относительно обработки персональных данных.
-1.2. Используя Сервис, Вы выражаете свое безусловное согласие с настоящей Политикой.
+Администрация сервиса GobiAI Bot уважает вашу конфиденциальность и защищает персональные данные.
 
-<b>2. ВЛАДЕЛЕЦ И АДМИНИСТРАТОР</b>
-2.1. Владелец: Симикян Эрик Самвелович
-2.2. Контактные данные: Telegram @smknnnn
+<b>2. ВЛАДЕЛЕЦ</b>
+Симикян Эрик Самвелович
+Telegram: @smknnnn
 
 <b>3. ОБРАБАТЫВАЕМЫЕ ДАННЫЕ</b>
-3.1. Персональные данные:
-• Идентификатор пользователя Telegram (User ID)
-• Имя пользователя (username)
-• Статистика использования сервиса
-• История сообщений и запросов
-• Данные о платежах и подписках
+• ID пользователя Telegram
+• Имя пользователя
+• Статистика использования
+• История сообщений
 
-<b>4. ЦЕЛИ ОБРАБОТКИ ДАННЫХ</b>
-4.1. Предоставление услуг AI-ассистента
-4.2. Обработка платежей и управление подписками
-4.3. Улучшение качества Сервиса
-4.4. Соблюдение законодательства Российской Федерации
-
-<b>5. ХРАНЕНИЕ И ЗАЩИТА ДАННЫХ</b>
-5.1. Данные хранятся в зашифрованном виде на защищенных серверах
-5.2. Срок хранения: 5 лет с момента последней активности
-5.3. Доступ к данным имеют только уполномоченные сотрудники
-
-<b>6. ПРАВА ПОЛЬЗОВАТЕЛЯ</b>
-6.1. Право на доступ к своим персональным данным
-6.2. Право на исправление неточных данных
-6.3. Право на удаление данных
-6.4. Право на отзыв согласия на обработку данных
-
-<b>7. КОНТАКТЫ</b>
-По всем вопросам: Telegram @smknnnn
-""",
-
-    'user_agreement': """
-📋 <b>ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ GobiAI Bot</b>
-
-<b>1. ОБЩИЕ ПОЛОЖЕНИЯ</b>
-1.1. Настоящее Соглашение регулирует отношения между Администрацией сервиса GobiAI Bot и Пользователем.
-1.2. Соглашение является публичной офертой в соответствии со ст. 437 ГК РФ.
-
-<b>2. ПРЕДМЕТ СОГЛАШЕНИЯ</b>
-2.1. Администрация предоставляет Пользователю доступ к AI-моделям через Telegram бота.
-2.2. Услуги предоставляются на условиях «как есть» (as is).
-
-<b>3. ОГРАНИЧЕНИЯ ИСПОЛЬЗОВАНИЯ</b>
-3.1. Запрещается:
-• Распространение незаконного контента
-• Нарушение авторских прав
-• Мошеннические действия
-• Спам и массовые рассылки
-
-<b>4. ОТВЕТСТВЕННОСТЬ</b>
-4.1. Администрация не несет ответственности за:
-• Точность генерируемого контента
-• Убытки Пользователя
-• Технические сбои
-
-<b>5. ОПЛАТА И ВОЗВРАТЫ</b>
-5.1. Оплата услуг производится через ЮKassa.
-5.2. При начале использования услуг возврат невозможен.
-
-<b>6. ЗАКЛЮЧИТЕЛЬНЫЕ ПОЛОЖЕНИЯ</b>
-6.1. Соглашение действует с момента начала использования Сервиса.
-6.2. Администрация вправе вносить изменения в Соглашение.
-""",
-
-    'payment_terms': """
-💳 <b>УСЛОВИЯ ОПЛАТЫ И ВОЗВРАТОВ GobiAI Bot</b>
-
-<b>1. ОБЩИЕ ПОЛОЖЕНИЯ</b>
-1.1. Настоящие Условия оплаты регулируют порядок расчетов между Пользователем и Администрацией.
-
-<b>2. ПОРЯДОК ОПЛАТЫ</b>
-2.1. Цены указаны в российских рублях (RUB).
-2.2. Оплата производится единовременно за выбранный период.
-
-<b>3. ВОЗВРАТ СРЕДСТВ</b>
-3.1. Возврат средств НЕВОЗМОЖЕН в случаях:
-• Начала использования оплаченных услуг
-• Истечения 14 дней с момента оплаты
-
-<b>4. БЕЗОПАСНОСТЬ ПЛАТЕЖЕЙ</b>
-4.1. Все транзакции защищены стандартом PCI DSS.
-4.2. Данные банковских карт не хранятся на серверах.
+<b>4. ЦЕЛИ ОБРАБОТКИ</b>
+• Предоставление услуг AI-ассистента
+• Обработка платежей
+• Улучшение сервиса
 
 <b>5. КОНТАКТЫ</b>
-По вопросам оплаты: Telegram @smknnnn
+По вопросам: @smknnnn
 """,
 
-    'subscription_terms': """
-📄 <b>ДОГОВОР ПОДПИСКИ НА УСЛУГИ GobiAI Bot</b>
+    'agreement': """
+📋 <b>ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ GobiAI Bot</b>
+
+<b>1. ПРЕДМЕТ СОГЛАШЕНИЯ</b>
+Предоставление доступа к AI-моделям через Telegram бота.
+
+<b>2. УСЛОВИЯ ИСПОЛЬЗОВАНИЯ</b>
+2.1. Использование Сервиса означает согласие с условиями
+2.2. Запрещен спам, мошенничество, нарушение законов
+
+<b>3. ОТВЕТСТВЕННОСТЬ</b>
+3.1. Администрация не несет ответственности за:
+• Точность генерируемого контента
+• Убытки пользователей
+• Технические сбои
+
+<b>4. ОПЛАТА И ВОЗВРАТЫ</b>
+4.1. Оплата через ЮKassa
+4.2. Возврат при начале использования невозможен
+
+<b>5. КОНТАКТЫ</b>
+Telegram: @smknnnn
+""",
+
+    'payment': """
+💳 <b>УСЛОВИЯ ОПЛАТЫ GobiAI Bot</b>
+
+<b>1. ОБЩИЕ ПОЛОЖЕНИЯ</b>
+Оплата услуг осуществляется через платежную систему ЮKassa.
+
+<b>2. ПОРЯДОК ОПЛАТЫ</b>
+2.1. Цены в рублях
+2.2. Оплата единовременная за период
+
+<b>3. ВОЗВРАТ СРЕДСТВ</b>
+3.1. Возврат невозможен после начала использования услуг
+3.2. Возврат возможен только при технических ошибках
+
+<b>4. БЕЗОПАСНОСТЬ</b>
+4.1. Все платежи защищены PCI DSS
+4.2. Данные карт не хранятся на серверах
+
+<b>5. КОНТАКТЫ</b>
+По вопросам оплаты: @smknnnn
+""",
+
+    'subscription': """
+📄 <b>ДОГОВОР ПОДПИСКИ GobiAI Bot</b>
 
 <b>1. ПРЕДМЕТ ДОГОВОРА</b>
-1.1. Настоящий Договор является публичной офертой на предоставление услуг доступа к AI-моделям.
+Предоставление доступа к AI-моделям по подписке.
 
-<b>2. ПОРЯДОК АКТИВАЦИИ</b>
-2.1. Подписка активируется после успешного поступления оплаты.
-2.2. Срок действия: 30 календарных дней с момента активации.
+<b>2. АКТИВАЦИЯ</b>
+2.1. Подписка активируется после оплаты
+2.2. Срок: 30 дней с момента активации
 
 <b>3. ПРАВА И ОБЯЗАННОСТИ</b>
-3.1. Администрация обязуется обеспечивать доступ к заявленному функционалу.
-3.2. Пользователь обязуется соблюдать условия использования.
+3.1. Администрация обеспечивает доступ к функционалу
+3.2. Пользователь соблюдает правила использования
 
-<b>4. ПРЕКРАЩЕНИЕ ДЕЙСТВИЯ</b>
-4.1. Подписка автоматически прекращается по истечении оплаченного периода.
-4.2. Возврат средств при досрочном прекращении не производится.
+<b>4. ПРЕКРАЩЕНИЕ</b>
+4.1. Автоматически по истечении срока
+4.2. Возврат при досрочном прекращении невозможен
 
 <b>5. РЕКВИЗИТЫ</b>
 Владелец: Симикян Эрик Самвелович
-Контакт: Telegram @smknnnn
+Контакт: @smknnnn
 """
 }
 
-# ========== МЕНЮ-ПАНЕЛЬ (БЕЗ КНОПКИ ОСТАНОВИТЬ) ==========
+# ========== МЕНЮ-ПАНЕЛЬ ==========
 def get_main_reply_keyboard(lang='ru'):
     if lang == 'ru':
         return ReplyKeyboardMarkup(
@@ -176,12 +165,6 @@ def get_main_reply_keyboard(lang='ru'):
             resize_keyboard=True
         )
 
-def get_lang_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang_ru")],
-        [InlineKeyboardButton(text="🇺🇸 English", callback_data="lang_en")]
-    ])
-
 def get_models_keyboard(user_subscription, lang='ru'):
     keyboard = []
     available_categories = Config.SUBSCRIPTION_ACCESS.get(user_subscription, ['free'])
@@ -200,7 +183,7 @@ def get_models_keyboard(user_subscription, lang='ru'):
 
 def get_subscription_keyboard(lang='ru'):
     keyboard = []
-    for plan in Config.SUBSCRIPTION_PLANS[1:]:  # Пропускаем бесплатный
+    for plan in Config.SUBSCRIPTION_PLANS[1:]:
         name = plan['name'] if lang == 'ru' else plan['name_en']
         keyboard.append([
             InlineKeyboardButton(text=f"ℹ️ {name}", callback_data=f"plan_info_{plan['id']}"),
@@ -224,7 +207,7 @@ def get_api_key_keyboard(lang='ru'):
         if model:
             name = model['name'] if lang == 'ru' else model['name_en']
             keyboard.append([
-                InlineKeyboardButton(text=f"ℹ️ {name}", callback_data=f"api_info_{model_id}"),
+                InlineKeyboardButton(text=f"ℹ️ {name} - {price}₽", callback_data=f"api_info_{model_id}"),
                 InlineKeyboardButton(text="🔑 Купить", callback_data=f"api_{model_id}")
             ])
     
@@ -273,15 +256,6 @@ def get_legal_docs_keyboard(lang='ru'):
             [InlineKeyboardButton(text="🔙 Back", callback_data="back_to_menu")]
         ])
 
-def get_generate_image_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎨 Сгенерировать изображение", callback_data="generate_image")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")]
-    ])
-
-def get_stop_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⏹️ Остановить генерацию", callback_data="stop_generation")]])
-
 def get_payment_check_keyboard(payment_id):
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Я оплатил", callback_data=f"paid_{payment_id}")],
@@ -316,11 +290,6 @@ def get_model_info_text(model, lang='ru'):
 {"✅ Audio" if model['supports_audio'] else "❌ Audio"}"""
 
 def get_plan_info_text(plan, lang='ru'):
-    available_models = []
-    for category in Config.SUBSCRIPTION_ACCESS.get(plan['id'], []):
-        if category in Config.AI_MODELS:
-            available_models.extend([m['name'] if lang == 'ru' else m['name_en'] for m in Config.AI_MODELS[category]])
-    
     if lang == 'ru':
         return f"""💎 <b>{plan['name']}</b>
 
@@ -328,10 +297,7 @@ def get_plan_info_text(plan, lang='ru'):
 📈 Лимит сообщений: {plan['daily_limit']}/день
 🖼 Генерация изображений: {plan['image_generate']}/день
 📤 Отправка изображений: {plan['image_send']}/день
-🎥 Отправка видео: {plan['video_send']}/день
-
-<b>Доступные модели:</b>
-{', '.join(available_models[:3])}{'...' if len(available_models) > 3 else ''}"""
+🎥 Отправка видео: {plan['video_send']}/день"""
     else:
         return f"""💎 <b>{plan['name_en']}</b>
 
@@ -339,10 +305,7 @@ def get_plan_info_text(plan, lang='ru'):
 📈 Message limit: {plan['daily_limit']}/day
 🖼 Image generation: {plan['image_generate']}/day
 📤 Image sending: {plan['image_send']}/day
-🎥 Video sending: {plan['video_send']}/day
-
-<b>Available models:</b>
-{', '.join(available_models[:3])}{'...' if len(available_models) > 3 else ''}"""
+🎥 Video sending: {plan['video_send']}/day"""
 
 async def check_payment_status(payment_id, yookassa_id, user_id):
     try:
@@ -360,12 +323,6 @@ async def check_payment_status(payment_id, yookassa_id, user_id):
                     'en': "✅ <b>Payment confirmed! Subscription activated for 30 days.</b>"
                 }
             else:
-                model_name = payment['model_id']
-                for category_models in Config.AI_MODELS.values():
-                    for model in category_models:
-                        if model['id'] == payment['model_id']:
-                            model_name = model['name'] if lang == 'ru' else model['name_en']
-                            break
                 success_text = {
                     'ru': f"✅ <b>Платеж подтвержден!</b>\n\nДля получения API-ключа обратитесь к {Config.SUPPORT_USERNAME}",
                     'en': f"✅ <b>Payment confirmed!</b>\n\nContact {Config.SUPPORT_USERNAME} for your API key"
@@ -378,122 +335,21 @@ async def check_payment_status(payment_id, yookassa_id, user_id):
         logger.error(f"Payment check error: {e}")
         return False
 
-# ========== ЮРИДИЧЕСКИЕ ДОКУМЕНТЫ ОБРАБОТЧИКИ ==========
+# ========== ЮРИДИЧЕСКИЕ ДОКУМЕНТЫ ==========
 @dp.callback_query(F.data == "legal_docs")
 async def show_legal_docs(callback: types.CallbackQuery):
-    user = db.get_user(callback.from_user.id)
-    lang = user['language'] if user else 'ru'
-    
-    text = {
-        'ru': "📄 <b>Юридические документы</b>\n\nВыберите документ для ознакомления:",
-        'en': "📄 <b>Legal Documents</b>\n\nSelect a document to review:"
-    }
-    await callback.message.answer(text[lang], reply_markup=get_legal_docs_keyboard(lang))
+    await callback.message.answer("📄 <b>Выберите документ:</b>", reply_markup=get_legal_docs_keyboard('ru'))
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("doc_"))
 async def show_legal_doc(callback: types.CallbackQuery):
     doc_type = callback.data.replace("doc_", "")
-    user = db.get_user(callback.from_user.id)
-    lang = user['language'] if user else 'ru'
     
     if doc_type in LEGAL_DOCUMENTS:
-        doc_text = LEGAL_DOCUMENTS[doc_type]
-        
-        # Разбиваем на части по 4000 символов
-        if len(doc_text) > 4000:
-            parts = []
-            current_part = ""
-            for paragraph in doc_text.split('\n\n'):
-                if len(current_part + paragraph) < 4000:
-                    current_part += paragraph + '\n\n'
-                else:
-                    parts.append(current_part)
-                    current_part = paragraph + '\n\n'
-            if current_part:
-                parts.append(current_part)
-        else:
-            parts = [doc_text]
-        
-        # Отправляем части последовательно
-        for i, part in enumerate(parts):
-            if i == 0:
-                await callback.message.answer(part)
-            else:
-                await callback.message.answer(part)
-        
-        await callback.answer("✅ Документ загружен")
+        await callback.message.answer(LEGAL_DOCUMENTS[doc_type])
     else:
         await callback.answer("❌ Документ не найден")
-
-# ========== ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ ==========
-@dp.message(F.text == "🎨 Сгенерировать фото")
-@dp.message(F.text == "🎨 Generate image")
-async def handle_generate_image_menu(message: types.Message):
-    user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
-        
-    lang = user['language']
-    text = {
-        'ru': "🎨 <b>Генерация изображений</b>\n\nИспользуйте команду /generate с описанием:\n\n<code>/generate красная спортивная машина в горах</code>",
-        'en': "🎨 <b>Image Generation</b>\n\nUse /generate command with description:\n\n<code>/generate red sports car in mountains</code>"
-    }
-    await message.answer(text[lang])
-
-@dp.message(F.text.startswith("/generate"))
-async def handle_generate_command(message: types.Message):
-    user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
-        
-    prompt = message.text.replace("/generate", "").strip()
-    if not prompt:
-        await message.answer("❌ Укажите описание для генерации изображения")
-        return
-    
-    # Проверяем лимиты генерации изображений
-    can_generate, error_msg = db.can_generate_image(user['user_id'])
-    if not can_generate:
-        await message.answer(f"❌ {error_msg}")
-        return
-    
-    lang = user['language']
-    wait_text = {
-        'ru': "🎨 <b>Генерация изображения...</b>",
-        'en': "🎨 <b>Generating image...</b>"
-    }
-    
-    msg = await message.answer(wait_text[lang])
-    active_generations[message.from_user.id] = True
-    
-    try:
-        # Используем GPT-5 Image Mini для генерации
-        result = await routerai_service.generate_image(prompt, model_id=Config.IMAGE_GENERATION_MODEL)
-        
-        if result['success'] and active_generations.get(message.from_user.id):
-            # Обновляем счетчик генераций
-            db.update_media_usage(user['user_id'], 'image_generate')
-            
-            if result.get('image_data'):
-                # Отправляем сгенерированное изображение
-                image_data = base64.b64decode(result['image_data'])
-                await message.answer_photo(
-                    types.BufferedInputFile(image_data, filename="generated_image.jpg"),
-                    caption="🎨 <b>Сгенерированное изображение</b>"
-                )
-                await msg.delete()
-            else:
-                await msg.edit_text("✅ <b>Изображение сгенерировано!</b>")
-        elif not result['success']:
-            await msg.edit_text(f"❌ <b>Ошибка генерации:</b>\n\n{result['error']}")
-            
-    except Exception as e:
-        await msg.edit_text("❌ <b>Ошибка при генерации изображения</b>")
-    finally:
-        active_generations.pop(message.from_user.id, None)
+    await callback.answer()
 
 # ========== ОСНОВНЫЕ ОБРАБОТЧИКИ ==========
 @dp.message(Command("start"))
@@ -514,20 +370,6 @@ async def cmd_start(message: types.Message):
             welcome_text += f"\n\n🎁 <b>Активирована подписка Lite на 10 дней по реферальной ссылке!</b>"
         
         await message.answer(welcome_text, reply_markup=get_main_reply_keyboard('ru'))
-        
-        # Отправляем юридическое уведомление
-        legal_notice = """
-⚠️ <b>Важная информация</b>
-
-Используя бота, вы соглашаетесь с:
-• Политикой конфиденциальности
-• Пользовательским соглашением  
-• Условиями оплаты
-• Договором подписки
-
-Полные версии документов доступны в разделе "👤 Мой профиль" → "📄 Юридические документы"
-        """
-        await message.answer(legal_notice)
     else:
         await message.answer("👋 <b>С возвращением!</b>", reply_markup=get_main_reply_keyboard(user['language']))
 
@@ -540,11 +382,7 @@ async def handle_models(message: types.Message):
         return
         
     lang = user['language']
-    text = {
-        'ru': "🤖 <b>Выберите AI-модель</b>\n\nℹ️ - информация о модели\n✅ - выбрать модель",
-        'en': "🤖 <b>Choose AI model</b>\n\nℹ️ - model information\n✅ - select model"
-    }
-    await message.answer(text[lang], reply_markup=get_models_keyboard(user['subscription'], lang))
+    await message.answer("🤖 <b>Выберите AI-модель</b>", reply_markup=get_models_keyboard(user['subscription'], lang))
 
 @dp.message(F.text == "👤 Мой профиль")
 @dp.message(F.text == "👤 My profile")
@@ -562,51 +400,447 @@ async def handle_profile(message: types.Message):
         end_date = datetime.strptime(user['subscription_end'], '%Y-%m-%d')
         days_left = max((end_date - datetime.now()).days, 0)
     
-    trial_days_left = 0
-    if user['trial_end']:
-        trial_end = datetime.strptime(user['trial_end'], '%Y-%m-%d')
-        trial_days_left = max((trial_end - datetime.now()).days, 0)
-    
     profile_text = {
         'ru': f"""👤 <b>Ваш профиль</b>
 
 💎 Подписка: {plan['name'] if plan else 'Free'}
 📅 Дней до конца подписки: {days_left}
-🎁 Дней до конца триала: {trial_days_left}
 👥 Приглашено рефералов: {user['referral_count']}
 
 📊 <b>Использовано сегодня:</b>
 Сообщения: {user['daily_used']}/{plan['daily_limit'] if plan else 100}
 Сгенерировано изображений: {user['images_generated_today']}/{plan['image_generate'] if plan else 0}
 Отправлено изображений: {user['images_sent_today']}/{plan['image_send'] if plan else 0}
-Отправлено видео: {user['videos_sent_today']}/{plan['video_send'] if plan else 0}
 
 🤖 Текущая модель: {user['current_model']}""",
         'en': f"""👤 <b>Your Profile</b>
 
 💎 Subscription: {plan['name_en'] if plan else 'Free'}
 📅 Days until subscription end: {days_left}
-🎁 Days until trial end: {trial_days_left}
 👥 Referrals invited: {user['referral_count']}
 
 📊 <b>Used today:</b>
 Messages: {user['daily_used']}/{plan['daily_limit'] if plan else 100}
 Images generated: {user['images_generated_today']}/{plan['image_generate'] if plan else 0}
 Images sent: {user['images_sent_today']}/{plan['image_send'] if plan else 0}
-Videos sent: {user['videos_sent_today']}/{plan['video_send'] if plan else 0}
 
 🤖 Current model: {user['current_model']}"""
     }
     await message.answer(profile_text[lang], reply_markup=get_profile_keyboard(lang))
 
-# ... (остальные обработчики остаются такими же как в предыдущей версии)
+@dp.message(F.text == "💳 Купить подписку")
+@dp.message(F.text == "💳 Buy subscription")
+async def handle_buy_subscription(message: types.Message):
+    user = db.get_user(message.from_user.id)
+    if not user: 
+        await message.answer("❌ Сначала используйте /start")
+        return
+        
+    lang = user['language']
+    await message.answer("💎 <b>Выберите подписку</b>", reply_markup=get_subscription_keyboard(lang))
+
+@dp.message(F.text == "🔑 Купить API")
+@dp.message(F.text == "🔑 Buy API")
+async def handle_buy_api(message: types.Message):
+    user = db.get_user(message.from_user.id)
+    if not user: 
+        await message.answer("❌ Сначала используйте /start")
+        return
+        
+    lang = user['language']
+    await message.answer("🔑 <b>Купить API-ключ</b>", reply_markup=get_api_key_keyboard(lang))
+
+@dp.message(F.text == "📤 Рефералка")
+@dp.message(F.text == "📤 Referral")
+async def handle_referral(message: types.Message):
+    user = db.get_user(message.from_user.id)
+    if not user: 
+        await message.answer("❌ Сначала используйте /start")
+        return
+        
+    lang = user['language']
+    ref_text = {
+        'ru': f"""📤 <b>Реферальная система</b>
+
+👥 Приглашено пользователей: {user['referral_count']}
+
+🔗 <b>Ваша реферальная ссылка:</b>
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}""",
+        'en': f"""📤 <b>Referral System</b>
+
+👥 Users invited: {user['referral_count']}
+
+🔗 <b>Your referral link:</b>
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}"""
+    }
+    await message.answer(ref_text[lang], reply_markup=get_referral_keyboard(lang))
+
+@dp.message(F.text == "🆘 Помощь")
+@dp.message(F.text == "🆘 Help")
+async def handle_help(message: types.Message):
+    user = db.get_user(message.from_user.id)
+    lang = user['language'] if user else 'ru'
+    
+    help_text = {
+        'ru': f"""🆘 <b>Помощь по GobiAI</b>
+
+<b>Панель меню:</b>
+🧠 Выбрать модель - выбор AI-моделей
+👤 Мой профиль - информация + юр.документы
+💳 Купить подписку - покупка подписок
+🔑 Купить API - покупка API-ключей
+🎨 Сгенерировать фото - генерация изображений
+📤 Рефералка - реферальная система
+🆘 Помощь - эта справка
+
+<b>Команды:</b>
+/start - начать работу
+/generate [описание] - сгенерировать изображение
+
+<b>Поддержка:</b> {Config.SUPPORT_USERNAME}""",
+        'en': f"""🆘 <b>GobiAI Help</b>
+
+<b>Menu Panel:</b>
+🧠 Choose model - select AI models
+👤 My profile - info + legal docs
+💳 Buy subscription - buy subscriptions
+🔑 Buy API - buy API keys
+🎨 Generate image - generate images
+📤 Referral - referral system
+🆘 Help - this help
+
+<b>Commands:</b>
+/start - start working
+/generate [description] - generate image
+
+<b>Support:</b> {Config.SUPPORT_USERNAME}"""
+    }
+    await message.answer(help_text[lang])
+
+# ========== CALLBACK ОБРАБОТЧИКИ ==========
+@dp.callback_query(F.data == "back_to_menu")
+async def back_to_menu(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    lang = user['language'] if user else 'ru'
+    await callback.message.answer("🔙 <b>Возврат в главное меню</b>", reply_markup=get_main_reply_keyboard(lang))
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("info_"))
+async def show_model_info(callback: types.CallbackQuery):
+    model_id = callback.data.replace("info_", "")
+    model = None
+    for category_models in Config.AI_MODELS.values():
+        for m in category_models:
+            if m['id'] == model_id:
+                model = m
+                break
+        if model: break
+    
+    if model:
+        user = db.get_user(callback.from_user.id)
+        lang = user['language'] if user else 'ru'
+        await callback.message.answer(get_model_info_text(model, lang))
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("plan_info_"))
+async def show_plan_info(callback: types.CallbackQuery):
+    plan_id = callback.data.replace("plan_info_", "")
+    plan = next((p for p in Config.SUBSCRIPTION_PLANS if p['id'] == plan_id), None)
+    
+    if plan:
+        user = db.get_user(callback.from_user.id)
+        lang = user['language'] if user else 'ru'
+        await callback.message.answer(get_plan_info_text(plan, lang))
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("api_info_"))
+async def show_api_info(callback: types.CallbackQuery):
+    model_id = callback.data.replace("api_info_", "")
+    model = None
+    for category_models in Config.AI_MODELS.values():
+        for m in category_models:
+            if m['id'] == model_id:
+                model = m
+                break
+        if model: break
+    
+    if model:
+        user = db.get_user(callback.from_user.id)
+        lang = user['language'] if user else 'ru'
+        price = Config.API_KEY_PRICES.get(model_id, 0)
+        api_text = {
+            'ru': f"{get_model_info_text(model, lang)}\n\n💰 <b>Цена API-ключа:</b> {price} руб (750K токенов)",
+            'en': f"{get_model_info_text(model, lang)}\n\n💰 <b>API Key Price:</b> {price} RUB (750K tokens)"
+        }
+        await callback.message.answer(api_text[lang])
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("model_"))
+async def select_model(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    if not user: 
+        await callback.answer("Сначала используйте /start")
+        return
+        
+    model_id = callback.data.replace("model_", "")
+    db.update_user_model(user['user_id'], model_id)
+    
+    model_name = model_id
+    for category_models in Config.AI_MODELS.values():
+        for m in category_models:
+            if m['id'] == model_id:
+                model_name = m['name'] if user['language'] == 'ru' else m['name_en']
+                break
+    
+    lang = user['language']
+    await callback.message.answer(f"✅ <b>Модель {model_name} выбрана!</b>")
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("sub_"))
+async def process_subscription(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    if not user: 
+        await callback.answer("Сначала используйте /start")
+        return
+        
+    plan_id = callback.data.replace("sub_", "")
+    plan = next((p for p in Config.SUBSCRIPTION_PLANS if p['id'] == plan_id), None)
+    if not plan: 
+        await callback.answer("❌ План не найден")
+        return
+    
+    payment_id = str(uuid.uuid4())
+    db.create_payment(payment_id, user['user_id'], 'subscription', plan_id, None, plan['price'])
+    result = await yookassa_service.create_subscription_payment(user['user_id'], plan_id, plan['name'], plan['price'], user['language'])
+    
+    if result['success']:
+        db.update_payment_status(payment_id, 'pending', result['yookassa_id'])
+        payment_text = {
+            'ru': f"""💳 <b>Оплата подписки {plan['name']}</b>
+
+💰 Сумма: {plan['price']} руб
+📅 Срок: 30 дней
+
+👉 <a href="{result['confirmation_url']}">Перейти к оплате</a>
+
+⚠️ После оплаты нажмите "✅ Я оплатил" для проверки статуса.""",
+            'en': f"""💳 <b>Payment for {plan['name_en']}</b>
+
+💰 Amount: {plan['price']} RUB
+📅 Duration: 30 days
+
+👉 <a href="{result['confirmation_url']}">Proceed to payment</a>
+
+⚠️ After payment, click "✅ I paid" to check status."""
+        }
+        await callback.message.answer(payment_text[user['language']], reply_markup=get_payment_check_keyboard(payment_id))
+    else:
+        await callback.message.answer("❌ <b>Ошибка при создании платежа</b>\n\nПопробуйте позже.")
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("api_"))
+async def process_api(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    if not user: 
+        await callback.answer("Сначала используйте /start")
+        return
+        
+    model_id = callback.data.replace("api_", "")
+    price = Config.API_KEY_PRICES.get(model_id)
+    if not price: 
+        await callback.answer("❌ Модель не найдена")
+        return
+    
+    model = None
+    for category_models in Config.AI_MODELS.values():
+        for m in category_models:
+            if m['id'] == model_id:
+                model = m
+                break
+        if model: break
+    
+    payment_id = str(uuid.uuid4())
+    db.create_payment(payment_id, user['user_id'], 'api_key', None, model_id, price)
+    model_name = model['name'] if user['language'] == 'ru' else model['name_en']
+    result = await yookassa_service.create_api_key_payment(user['user_id'], model_id, model_name, price, user['language'])
+    
+    if result['success']:
+        db.update_payment_status(payment_id, 'pending', result['yookassa_id'])
+        payment_text = {
+            'ru': f"""🔑 <b>Покупка API-ключа {model_name}</b>
+
+💰 Стоимость: {price} руб (750K токенов)
+
+👉 <a href="{result['confirmation_url']}">Перейти к оплате</a>
+
+⚠️ После оплаты нажмите "✅ Я оплатил"
+
+📩 После подтверждения обратитесь к {Config.SUPPORT_USERNAME}""",
+            'en': f"""🔑 <b>API Key Purchase {model_name}</b>
+
+💰 Price: {price} RUB (750K tokens)
+
+👉 <a href="{result['confirmation_url']}">Proceed to payment</a>
+
+⚠️ After payment, click "✅ I paid"
+
+📩 After confirmation, contact {Config.SUPPORT_USERNAME}"""
+        }
+        await callback.message.answer(payment_text[user['language']], reply_markup=get_payment_check_keyboard(payment_id))
+    else:
+        await callback.message.answer("❌ <b>Ошибка при создании платежа</b>\n\nПопробуйте позже.")
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("paid_"))
+async def check_payment(callback: types.CallbackQuery):
+    payment_id = callback.data.replace("paid_", "")
+    payment = db.get_payment(payment_id)
+    if not payment: 
+        await callback.answer("❌ Платеж не найден")
+        return
+    
+    user = db.get_user(callback.from_user.id)
+    lang = user['language'] if user else 'ru'
+    
+    await callback.message.answer("⏳ <b>Проверяем статус платежа...</b>")
+    
+    result = await check_payment_status(payment_id, payment['yookassa_payment_id'], payment['user_id'])
+    if not result:
+        await callback.message.answer("❌ <b>Платеж еще не подтвержден</b>\n\nПопробуйте позже.")
+    await callback.answer()
+
+@dp.callback_query(F.data == "share_ref")
+async def share_referral(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    if not user: 
+        await callback.answer("Сначала используйте /start")
+        return
+        
+    ref_text = {
+        'ru': f"""📤 <b>Поделиться реферальной ссылкой</b>
+
+🔗 Ваша ссылка:
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}
+
+💎 Приглашайте друзей!""",
+        'en': f"""📤 <b>Share referral link</b>
+
+🔗 Your link:
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}
+
+💎 Invite friends!"""
+    }
+    await callback.message.answer(ref_text[user['language']])
+    await callback.answer()
+
+# ========== ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ ==========
+@dp.message(F.text.startswith("/generate"))
+async def handle_generate_command(message: types.Message):
+    user = db.get_user(message.from_user.id)
+    if not user: 
+        await message.answer("❌ Сначала используйте /start")
+        return
+        
+    prompt = message.text.replace("/generate", "").strip()
+    if not prompt:
+        await message.answer("❌ Укажите описание для генерации изображения")
+        return
+    
+    # Проверяем лимиты генерации изображений
+    can_generate, error_msg = db.can_generate_image(user['user_id'])
+    if not can_generate:
+        await message.answer(f"❌ {error_msg}")
+        return
+    
+    lang = user['language']
+    msg = await message.answer("🎨 <b>Генерация изображения...</b>")
+    active_generations[message.from_user.id] = True
+    
+    try:
+        result = await routerai_service.generate_image(prompt, model_id=Config.IMAGE_GENERATION_MODEL)
+        
+        if result['success'] and active_generations.get(message.from_user.id):
+            db.update_media_usage(user['user_id'], 'image_generate')
+            
+            if result.get('image_data'):
+                image_data = base64.b64decode(result['image_data'])
+                await message.answer_photo(
+                    types.BufferedInputFile(image_data, filename="generated_image.jpg"),
+                    caption="🎨 <b>Сгенерированное изображение</b>"
+                )
+                await msg.delete()
+            else:
+                await msg.edit_text("✅ <b>Изображение сгенерировано!</b>")
+        elif not result['success']:
+            await msg.edit_text(f"❌ <b>Ошибка генерации:</b>\n\n{result['error']}")
+            
+    except Exception as e:
+        await msg.edit_text("❌ <b>Ошибка при генерации изображения</b>")
+    finally:
+        active_generations.pop(message.from_user.id, None)
+
+# ========== ОБРАБОТКА СООБЩЕНИЙ ==========
+@dp.message(F.text)
+async def handle_message(message: types.Message):
+    # Пропускаем команды меню
+    menu_commands = ["🧠 Выбрать модель", "👤 Мой профиль", "💳 Купить подписку", "🔑 Купить API", 
+                    "🎨 Сгенерировать фото", "📤 Рефералка", "🆘 Помощь",
+                    "🧠 Choose model", "👤 My profile", "💳 Buy subscription", "🔑 Buy API",
+                    "🎨 Generate image", "📤 Referral", "🆘 Help"]
+    
+    if message.text in menu_commands:
+        return
+    
+    user = db.get_user(message.from_user.id)
+    if not user: 
+        await message.answer("❌ Сначала используйте /start")
+        return
+        
+    # Проверяем общие лимиты
+    can_use, error_msg = db.can_use_model(user['user_id'])
+    if not can_use: 
+        lang = user['language']
+        await message.answer(f"❌ {error_msg}")
+        return
+        
+    db.increment_daily_usage(user['user_id'])
+    
+    user_id = message.from_user.id
+    if user_id not in user_conversations:
+        user_conversations[user_id] = []
+    
+    user_conversations[user_id].append({"role": "user", "content": message.text})
+    if len(user_conversations[user_id]) > 10:
+        user_conversations[user_id] = user_conversations[user_id][-10:]
+    
+    lang = user['language']
+    msg = await message.answer("⏳ <b>Генерация началась...</b>")
+    active_generations[user_id] = True
+    
+    try:
+        result = await routerai_service.send_message(
+            user['current_model'], 
+            message.text,
+            user_conversations[user_id][:-1]
+        )
+        
+        if result['success'] and active_generations.get(user_id):
+            user_conversations[user_id].append({"role": "assistant", "content": result['response']})
+            await msg.edit_text(f"🤖 <b>Ответ:</b>\n\n{result['response']}")
+        elif not result['success']:
+            await msg.edit_text(f"❌ <b>Ошибка:</b>\n\n{result['error']}")
+            
+    except Exception as e:
+        await msg.edit_text("❌ <b>Ошибка соединения</b>\n\nПопробуйте позже.")
+    finally:
+        active_generations.pop(user_id, None)
 
 # ========== ВЕБХУК YOOKASSA ==========
 async def yookassa_webhook(request):
     try:
         body = await request.text()
         data = json.loads(body)
-        logger.info(f"YooKassa webhook received: {data.get('event')}")
+        logger.info(f"YooKassa webhook received")
         
         if data.get('event') == 'payment.succeeded':
             yookassa_id = data['object']['id']
@@ -624,23 +858,16 @@ async def yookassa_webhook(request):
                     if payment['type'] == 'subscription':
                         db.update_user_subscription(user_id, payment['plan_id'])
                         success_text = {
-                            'ru': "✅ <b>Платеж автоматически подтвержден!</b>\n\n🎉 Ваша подписка активирована на 30 дней!",
-                            'en': "✅ <b>Payment automatically confirmed!</b>\n\n🎉 Your subscription activated for 30 days!"
+                            'ru': "✅ <b>Платеж автоматически подтвержден! Подписка активирована.</b>",
+                            'en': "✅ <b>Payment automatically confirmed! Subscription activated.</b>"
                         }
                     else:
-                        model_name = payment['model_id']
-                        for category_models in Config.AI_MODELS.values():
-                            for model in category_models:
-                                if model['id'] == payment['model_id']:
-                                    model_name = model['name'] if lang == 'ru' else model['name_en']
-                                    break
                         success_text = {
-                            'ru': f"✅ <b>Платеж автоматически подтвержден!</b>\n\n🤖 Модель: {model_name}\n📩 Обратитесь к {Config.SUPPORT_USERNAME} для получения ключа",
-                            'en': f"✅ <b>Payment automatically confirmed!</b>\n\n🤖 Model: {model_name}\n📩 Contact {Config.SUPPORT_USERNAME} for your key"
+                            'ru': f"✅ <b>Платеж автоматически подтвержден!</b>\n\nОбратитесь к {Config.SUPPORT_USERNAME} для получения ключа",
+                            'en': f"✅ <b>Payment automatically confirmed!</b>\n\nContact {Config.SUPPORT_USERNAME} for your key"
                         }
                     
                     await bot.send_message(user_id, success_text[lang])
-                    logger.info(f"Payment {yookassa_id} confirmed for user {user_id}")
         
         return web.Response(status=200, text='OK')
     except Exception as e:
@@ -659,6 +886,14 @@ async def start_webhook_server():
 
 async def main():
     logger.info("Starting GobiAI bot with all fixes...")
+    
+    try:
+        # Проверяем подключение
+        await bot.get_me()
+        logger.info("Bot connected successfully")
+    except Exception as e:
+        logger.error(f"Bot connection failed: {e}")
+        return
     
     # Запускаем сервер для вебхуков
     runner = await start_webhook_server()
