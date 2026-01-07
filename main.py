@@ -194,7 +194,7 @@ LEGAL_DOCUMENTS = {
 """
 }
 
-# ========== МЕНЮ-ПАНЕЛЬ ==========
+# ========== МЕНЮ-ПАНЕЛЬ (ПОД ЧАТОМ) ==========
 def get_main_reply_keyboard(lang='ru'):
     if lang == 'ru':
         return ReplyKeyboardMarkup(
@@ -216,6 +216,10 @@ def get_main_reply_keyboard(lang='ru'):
             ],
             resize_keyboard=True
         )
+
+# Убираем меню (если нужно скрыть)
+def remove_keyboard():
+    return ReplyKeyboardRemove()
 
 def get_lang_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -241,7 +245,7 @@ def get_models_keyboard(user_subscription, lang='ru'):
 
 def get_subscription_keyboard(lang='ru'):
     keyboard = []
-    for plan in Config.SUBSCRIPTION_PLANS[1:]:
+    for plan in Config.SUBSCRIPTION_PLANS[1:]:  # Пропускаем бесплатный
         name = plan['name'] if lang == 'ru' else plan['name_en']
         keyboard.append([
             InlineKeyboardButton(text=f"ℹ️ {name}", callback_data=f"plan_info_{plan['id']}"),
@@ -276,13 +280,23 @@ def get_referral_keyboard(lang='ru'):
     if lang == 'ru':
         return InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="📤 Поделиться ссылкой", callback_data="share_ref")],
-            [InlineKeyboardButton(text="📄 Юридические документы", callback_data="legal_docs")],
             [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")]
         ])
     else:
         return InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="📤 Share link", callback_data="share_ref")],
-            [InlineKeyboardButton(text="📄 Legal documents", callback_data="legal_docs")],
+            [InlineKeyboardButton(text="🔙 Back", callback_data="back_to_menu")]
+        ])
+
+def get_profile_keyboard(lang='ru'):
+    if lang == 'ru':
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📄 Юридические документы", callback_data="legal_docs")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")]
+        ])
+    else:
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📄 Legal Documents", callback_data="legal_docs")],
             [InlineKeyboardButton(text="🔙 Back", callback_data="back_to_menu")]
         ])
 
@@ -399,7 +413,7 @@ async def check_payment_status(payment_id, yookassa_id, user_id):
                             break
                 success_text = {
                     'ru': f"✅ <b>Платеж подтвержден!</b>\n\nДля получения API-ключа обратитесь к {Config.SUPPORT_USERNAME}",
-                    'en': f"✅ <b>Платеж подтвержден!</b>\n\nContact {Config.SUPPORT_USERNAME} for your API key"
+                    'en': f"✅ <b>Payment confirmed!</b>\n\nContact {Config.SUPPORT_USERNAME} for your API key"
                 }
             
             await bot.send_message(user_id, success_text[lang])
@@ -427,13 +441,6 @@ async def show_legal_doc(callback: types.CallbackQuery):
     doc_type = callback.data.replace("doc_", "")
     user = db.get_user(callback.from_user.id)
     lang = user['language'] if user else 'ru'
-    
-    doc_names = {
-        'privacy': 'Политика конфиденциальности',
-        'agreement': 'Пользовательское соглашение', 
-        'payment': 'Условия оплаты',
-        'subscription': 'Договор подписки'
-    }
     
     if doc_type in LEGAL_DOCUMENTS:
         # Разбиваем длинный документ на части
@@ -546,7 +553,7 @@ async def cmd_start(message: types.Message):
 • Условиями оплаты
 • Договором подписки
 
-Полные версии документов доступны в разделе "📤 Рефералка" → "📄 Юридические документы"
+Полные версии документов доступны в разделе "👤 Мой профиль" → "📄 Юридические документы"
         """
         await message.answer(legal_notice)
     else:
@@ -620,7 +627,7 @@ Videos sent: {user['videos_sent_today']}/{plan['video_send'] if plan else 0}
 
 🤖 Current model: {user['current_model']}"""
     }
-    await message.answer(profile_text[lang])
+    await message.answer(profile_text[lang], reply_markup=get_profile_keyboard(lang))
 
 @dp.message(F.text == "💳 Купить подписку")
 @dp.message(F.text == "💳 Buy subscription")
@@ -698,11 +705,11 @@ async def handle_help(message: types.Message):
 
 <b>Панель меню:</b>
 🧠 Выбрать модель - просмотр и выбор AI-моделей
-👤 Мой профиль - информация о подписке и лимитах
+👤 Мой профиль - информация о подписке и лимитах + юр.документы
 💳 Купить подписку - выбор и покупка подписок
 🔑 Купить API - приобретение API-ключей
 🎨 Сгенерировать фото - генерация изображений по описанию
-📤 Рефералка - реферальная система и юр.документы
+📤 Рефералка - реферальная система
 🆘 Помощь - эта справка
 ⏹️ Остановить - прекращение текущей генерации
 
@@ -716,11 +723,11 @@ async def handle_help(message: types.Message):
 
 <b>Menu Panel:</b>
 🧠 Choose model - view and select AI models
-👤 My profile - subscription info and limits
+👤 My profile - subscription info, limits + legal docs
 💳 Buy subscription - choose and buy subscriptions
 🔑 Buy API - purchase API keys
 🎨 Generate image - generate images from text
-📤 Referral - referral system and legal docs
+📤 Referral - referral system
 🆘 Help - this help information
 ⏹️ Stop - stop current generation
 
@@ -744,8 +751,300 @@ async def handle_stop(message: types.Message):
         }
         await message.answer(stop_text['ru'])
 
-# ... (остальные callback обработчики остаются такими же, как в предыдущей версии)
-# [Здесь должны быть все callback обработчики из предыдущего кода]
+# ========== CALLBACK ОБРАБОТЧИКИ ==========
+@dp.callback_query(F.data == "lang_ru")
+@dp.callback_query(F.data == "lang_en")
+async def set_language(callback: types.CallbackQuery):
+    lang = "ru" if callback.data == "lang_ru" else "en"
+    
+    # Обновляем язык пользователя в базе
+    cursor = db.conn.cursor()
+    cursor.execute('UPDATE users SET language = ? WHERE user_id = ?', (lang, callback.from_user.id))
+    db.conn.commit()
+    
+    welcome_text = {
+        'ru': f"""🎉 <b>Язык изменен на Русский!</b>
+
+✨ <b>Бесплатный триал на {Config.TRIAL_MONTHS} месяца активирован!</b>
+
+Используйте панель меню внизу для навигации по боту.""",
+        'en': f"""🎉 <b>Language changed to English!</b>
+
+✨ <b>{Config.TRIAL_MONTHS} months free trial activated!</b>
+
+Use the menu panel below to navigate the bot."""
+    }
+    
+    await callback.message.edit_text(welcome_text[lang])
+    await callback.message.answer("👇 <b>Меню готово к использованию:</b>", reply_markup=get_main_reply_keyboard(lang))
+    await callback.answer()
+
+@dp.callback_query(F.data == "back_to_menu")
+async def back_to_menu(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    lang = user['language'] if user else 'ru'
+    await callback.message.edit_text("🔙 <b>Возврат в главное меню</b>")
+    await callback.message.answer("👇 <b>Используйте панель меню:</b>", reply_markup=get_main_reply_keyboard(lang))
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("info_"))
+async def show_model_info(callback: types.CallbackQuery):
+    model_id = callback.data.replace("info_", "")
+    model = None
+    for category_models in Config.AI_MODELS.values():
+        for m in category_models:
+            if m['id'] == model_id:
+                model = m
+                break
+        if model: break
+    
+    if model:
+        user = db.get_user(callback.from_user.id)
+        lang = user['language'] if user else 'ru'
+        await callback.message.answer(get_model_info_text(model, lang))
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("plan_info_"))
+async def show_plan_info(callback: types.CallbackQuery):
+    plan_id = callback.data.replace("plan_info_", "")
+    plan = next((p for p in Config.SUBSCRIPTION_PLANS if p['id'] == plan_id), None)
+    
+    if plan:
+        user = db.get_user(callback.from_user.id)
+        lang = user['language'] if user else 'ru'
+        await callback.message.answer(get_plan_info_text(plan, lang))
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("api_info_"))
+async def show_api_info(callback: types.CallbackQuery):
+    model_id = callback.data.replace("api_info_", "")
+    model = None
+    for category_models in Config.AI_MODELS.values():
+        for m in category_models:
+            if m['id'] == model_id:
+                model = m
+                break
+        if model: break
+    
+    if model:
+        user = db.get_user(callback.from_user.id)
+        lang = user['language'] if user else 'ru'
+        price = Config.API_KEY_PRICES.get(model_id, 0)
+        api_text = {
+            'ru': f"{get_model_info_text(model, lang)}\n\n💰 <b>Цена API-ключа:</b> {price} руб (750K токенов)",
+            'en': f"{get_model_info_text(model, lang)}\n\n💰 <b>API Key Price:</b> {price} RUB (750K tokens)"
+        }
+        await callback.message.answer(api_text[lang])
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("model_"))
+async def select_model(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    if not user: 
+        await callback.answer("Сначала используйте /start")
+        return
+        
+    model_id = callback.data.replace("model_", "")
+    db.update_user_model(user['user_id'], model_id)
+    
+    model_name = model_id
+    for category_models in Config.AI_MODELS.values():
+        for m in category_models:
+            if m['id'] == model_id:
+                model_name = m['name'] if user['language'] == 'ru' else m['name_en']
+                break
+    
+    lang = user['language']
+    success_text = {
+        'ru': f"✅ <b>Модель {model_name} выбрана!</b>\n\nТеперь отправляйте сообщения для генерации.",
+        'en': f"✅ <b>Model {model_name} selected!</b>\n\nNow send messages for generation."
+    }
+    await callback.message.answer(success_text[lang])
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("sub_"))
+async def process_subscription(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    if not user: 
+        await callback.answer("Сначала используйте /start")
+        return
+        
+    plan_id = callback.data.replace("sub_", "")
+    plan = next((p for p in Config.SUBSCRIPTION_PLANS if p['id'] == plan_id), None)
+    if not plan: 
+        await callback.answer("❌ План не найден")
+        return
+    
+    payment_id = str(uuid.uuid4())
+    db.create_payment(payment_id, user['user_id'], 'subscription', plan_id, None, plan['price'])
+    result = await yookassa_service.create_subscription_payment(user['user_id'], plan_id, plan['name'], plan['price'], user['language'])
+    
+    if result['success']:
+        db.update_payment_status(payment_id, 'pending', result['yookassa_id'])
+        payment_text = {
+            'ru': f"""💳 <b>Оплата подписки {plan['name']}</b>
+
+💰 Сумма: {plan['price']} руб
+📅 Срок: 30 дней
+📊 Лимит: {plan['daily_limit']} сообщений/день
+🖼 Генерация изображений: {plan['image_generate']}/день
+📤 Отправка изображений: {plan['image_send']}/день
+🎥 Отправка видео: {plan['video_send']}/день
+
+👉 <a href="{result['confirmation_url']}">Перейти к оплате</a>
+
+⚠️ После оплаты нажмите "✅ Я оплатил" для проверки статуса.""",
+            'en': f"""💳 <b>Payment for {plan['name_en']}</b>
+
+💰 Amount: {plan['price']} RUB
+📅 Duration: 30 days
+📊 Limit: {plan['daily_limit']} messages/day
+🖼 Image generation: {plan['image_generate']}/day
+📤 Image sending: {plan['image_send']}/day
+🎥 Video sending: {plan['video_send']}/day
+
+👉 <a href="{result['confirmation_url']}">Proceed to payment</a>
+
+⚠️ After payment, click "✅ I paid" to check status."""
+        }
+        await callback.message.answer(payment_text[user['language']], reply_markup=get_payment_check_keyboard(payment_id))
+    else:
+        error_text = {
+            'ru': "❌ <b>Ошибка при создании платежа</b>\n\nПопробуйте позже.",
+            'en': "❌ <b>Payment creation error</b>\n\nTry again later."
+        }
+        await callback.message.answer(error_text[user['language']])
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("api_"))
+async def process_api(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    if not user: 
+        await callback.answer("Сначала используйте /start")
+        return
+        
+    model_id = callback.data.replace("api_", "")
+    price = Config.API_KEY_PRICES.get(model_id)
+    if not price: 
+        await callback.answer("❌ Модель не найдена")
+        return
+    
+    model = None
+    for category_models in Config.AI_MODELS.values():
+        for m in category_models:
+            if m['id'] == model_id:
+                model = m
+                break
+        if model: break
+    
+    payment_id = str(uuid.uuid4())
+    db.create_payment(payment_id, user['user_id'], 'api_key', None, model_id, price)
+    model_name = model['name'] if user['language'] == 'ru' else model['name_en']
+    result = await yookassa_service.create_api_key_payment(user['user_id'], model_id, model_name, price, user['language'])
+    
+    if result['success']:
+        db.update_payment_status(payment_id, 'pending', result['yookassa_id'])
+        payment_text = {
+            'ru': f"""🔑 <b>Покупка API-ключа {model_name}</b>
+
+💰 Стоимость: {price} руб (за 750K токенов)
+
+👉 <a href="{result['confirmation_url']}">Перейти к оплате</a>
+
+⚠️ После оплаты нажмите "✅ Я оплатил"
+
+📩 После подтверждения обратитесь к {Config.SUPPORT_USERNAME} для получения ключа.""",
+            'en': f"""🔑 <b>API Key Purchase {model_name}</b>
+
+💰 Price: {price} RUB (per 750K tokens)
+
+👉 <a href="{result['confirmation_url']}">Proceed to payment</a>
+
+⚠️ After payment, click "✅ I paid"
+
+📩 After confirmation, contact {Config.SUPPORT_USERNAME} for your key."""
+        }
+        await callback.message.answer(payment_text[user['language']], reply_markup=get_payment_check_keyboard(payment_id))
+    else:
+        error_text = {
+            'ru': "❌ <b>Ошибка при создании платежа</b>\n\nПопробуйте позже.",
+            'en': "❌ <b>Payment creation error</b>\n\nTry again later."
+        }
+        await callback.message.answer(error_text[user['language']])
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("paid_"))
+async def check_payment(callback: types.CallbackQuery):
+    payment_id = callback.data.replace("paid_", "")
+    payment = db.get_payment(payment_id)
+    if not payment: 
+        await callback.answer("❌ Платеж не найден")
+        return
+    
+    user = db.get_user(callback.from_user.id)
+    lang = user['language'] if user else 'ru'
+    
+    await callback.message.edit_text("⏳ <b>Проверяем статус платежа...</b>")
+    
+    result = await check_payment_status(payment_id, payment['yookassa_payment_id'], payment['user_id'])
+    if not result:
+        not_paid_text = {
+            'ru': "❌ <b>Платеж еще не подтвержден</b>\n\nПожалуйста, подождите несколько минут и попробуйте снова.",
+            'en': "❌ <b>Payment not confirmed yet</b>\n\nPlease wait a few minutes and try again."
+        }
+        await callback.message.answer(not_paid_text[lang], reply_markup=get_payment_check_keyboard(payment_id))
+    await callback.answer()
+
+@dp.callback_query(F.data == "share_ref")
+async def share_referral(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    if not user: 
+        await callback.answer("Сначала используйте /start")
+        return
+        
+    ref_text = {
+        'ru': f"""📤 <b>Поделиться реферальной ссылкой</b>
+
+🔗 Ваша ссылка:
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}
+
+💎 Приглашайте друзей и получайте бонусы!""",
+        'en': f"""📤 <b>Share referral link</b>
+
+🔗 Your link:
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}
+
+💎 Invite friends and get bonuses!"""
+    }
+    await callback.message.answer(ref_text[user['language']])
+    await callback.answer()
+
+@dp.callback_query(F.data == "generate_image")
+async def generate_image_menu(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    if not user: 
+        await callback.answer("Сначала используйте /start")
+        return
+        
+    text = {
+        'ru': "🎨 <b>Генерация изображений</b>\n\nИспользуйте команду /generate с описанием:\n\n<code>/generate красная спортивная машина в горах</code>",
+        'en': "🎨 <b>Image Generation</b>\n\nUse /generate command with description:\n\n<code>/generate red sports car in mountains</code>"
+    }
+    await callback.message.answer(text[user['language']])
+    await callback.answer()
+
+@dp.callback_query(F.data == "stop_generation")
+async def stop_generation(callback: types.CallbackQuery):
+    if callback.from_user.id in active_generations:
+        active_generations[callback.from_user.id] = False
+        user = db.get_user(callback.from_user.id)
+        lang = user['language'] if user else 'ru'
+        stop_text = {
+            'ru': "⏹️ <b>Генерация остановлена</b>",
+            'en': "⏹️ <b>Generation stopped</b>"
+        }
+        await callback.message.answer(stop_text[lang])
+    await callback.answer()
 
 # ========== ОБРАБОТКА СООБЩЕНИЙ ДЛЯ AI ==========
 @dp.message(F.photo)
@@ -828,6 +1127,15 @@ async def handle_photo(message: types.Message):
 
 @dp.message(F.text)
 async def handle_message(message: types.Message):
+    # Пропускаем команды меню
+    menu_commands = ["🧠 Выбрать модель", "👤 Мой профиль", "💳 Купить подписку", "🔑 Купить API", 
+                    "🎨 Сгенерировать фото", "📤 Рефералка", "🆘 Помощь", "⏹️ Остановить",
+                    "🧠 Choose model", "👤 My profile", "💳 Buy subscription", "🔑 Buy API",
+                    "🎨 Generate image", "📤 Referral", "🆘 Help", "⏹️ Stop"]
+    
+    if message.text in menu_commands:
+        return
+    
     user = db.get_user(message.from_user.id)
     if not user: 
         await message.answer("❌ Сначала используйте /start")
@@ -888,7 +1196,7 @@ async def yookassa_webhook(request):
     try:
         body = await request.text()
         data = json.loads(body)
-        logger.info(f"YooKassa webhook received")
+        logger.info(f"YooKassa webhook received: {data.get('event')}")
         
         if data.get('event') == 'payment.succeeded':
             yookassa_id = data['object']['id']
@@ -922,6 +1230,7 @@ async def yookassa_webhook(request):
                         }
                     
                     await bot.send_message(user_id, success_text[lang])
+                    logger.info(f"Payment {yookassa_id} confirmed for user {user_id}")
         
         return web.Response(status=200, text='OK')
     except Exception as e:
@@ -939,7 +1248,7 @@ async def start_webhook_server():
     return runner
 
 async def main():
-    logger.info("Starting GobiAI bot with legal protection...")
+    logger.info("Starting GobiAI bot with full functionality...")
     
     # Запускаем сервер для вебхуков
     runner = await start_webhook_server()
