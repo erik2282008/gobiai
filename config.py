@@ -103,7 +103,7 @@ class Config:
     # Subscription plans with media limits
     SUBSCRIPTION_PLANS = [
         {"id": "free", "name": "🆓 Бесплатно", "name_en": "🆓 Free", "price": 0, 
-         "daily_limit": 100, "image_send": 2, "image_generate": 0, "video_send": 0},
+         "daily_limit": 100, "image_send": 2, "image_generate": 1, "video_send": 1},
         
         {"id": "lite", "name": "💎 Lite", "name_en": "💎 Lite", "price": 15, 
          "daily_limit": 200, "image_send": 5, "image_generate": 1, "video_send": 1},
@@ -129,14 +129,14 @@ class Config:
 
     # Monthly token limits for abuse protection
     MAX_MONTHLY_TOKENS = {
-        "free": 10000,        # 10K токенов
-        "lite": 50000,        # 50K токенов  
-        "lite_plus": 100000,  # 100K токенов
+        "free": 25000,        # 10K токенов
+        "lite": 500000,        # 50K токенов  
+        "lite_plus": 200000,  # 100K токенов
         "vip": 500000,        # 500K токенов
         "vip_plus": 600000,   # 600K токенов
-        "quantum": 800000,    # 800K токенов
+        "quantum": 700000,    # 800K токенов
         "quantum_pro": 800000, # 800K токенов
-        "quantum_infinite": 1000000, # 1M токенов
+        "quantum_infinite": 900000, # 1M токенов
     }
 
     # Maximum cost protection per user (рублей)
@@ -144,3 +144,4 @@ class Config:
 
     # Referral settings
     REFERRAL_REWARD_DAYS = 10
+
