@@ -1,6 +1,5 @@
 import aiohttp
 import asyncio
-import base64
 from config import Config
 
 class RouterAIService:
@@ -13,7 +12,6 @@ class RouterAIService:
         }
     
     async def send_message(self, model_id, message, conversation_history=None, extra_data=None):
-        """Отправляет сообщение в RouterAI API"""
         payload = {
             "model": model_id,
             "messages": [
@@ -25,11 +23,9 @@ class RouterAIService:
             "stream": False
         }
         
-        # Добавляем историю сообщений если есть
         if conversation_history:
             payload["messages"] = conversation_history + payload["messages"]
         
-        # Добавляем изображение если есть
         if extra_data and "image" in extra_data:
             payload["messages"][0]["content"] = [
                 {
@@ -84,7 +80,6 @@ class RouterAIService:
             }
     
     async def check_model_availability(self, model_id):
-        """Проверяет доступность модели"""
         payload = {
             "model": model_id,
             "messages": [
