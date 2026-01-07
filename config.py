@@ -78,13 +78,16 @@ class Config:
         "google/gemma-3-4b-it": 6,
     }
 
-    # Subscription plans
+    # Subscription plans with new limits
     SUBSCRIPTION_PLANS = [
-        {"id": "free", "name": "🆓 Бесплатно", "name_en": "🆓 Free", "price": 0, "daily_limit": 100},
-        {"id": "lite", "name": "💎 Lite", "name_en": "💎 Lite", "price": 9, "daily_limit": 250},
-        {"id": "vip", "name": "⭐ VIP", "name_en": "⭐ VIP", "price": 15, "daily_limit": 250},
-        {"id": "vip_plus", "name": "🎨 VIP+", "name_en": "🎨 VIP+", "price": 149, "daily_limit": 500},
-        {"id": "quantum", "name": "🚀 Quantum", "name_en": "🚀 Quantum", "price": 6999, "daily_limit": 1500},
-        {"id": "quantum_pro", "name": "🔬 Quantum Pro", "name_en": "🔬 Quantum Pro", "price": 9499, "daily_limit": 2500},
-        {"id": "quantum_infinite", "name": "🌌 Quantum Infinite", "name_en": "🌌 Quantum Infinite", "price": 49990, "daily_limit": 5000},
+        {"id": "free", "name": "🆓 Бесплатно", "name_en": "🆓 Free", "price": 0, "daily_limit": 100, "image_generate": 0, "image_send": 0, "video_send": 0},
+        {"id": "lite", "name": "💎 Lite", "name_en": "💎 Lite", "price": 9, "daily_limit": 250, "image_generate": 1, "image_send": 3, "video_send": 1},
+        {"id": "vip", "name": "⭐ VIP", "name_en": "⭐ VIP", "price": 15, "daily_limit": 250, "image_generate": 2, "image_send": 5, "video_send": 2},
+        {"id": "vip_plus", "name": "🎨 VIP+", "name_en": "🎨 VIP+", "price": 199, "daily_limit": 500, "image_generate": 10, "image_send": 15, "video_send": 5},
+        {"id": "quantum", "name": "🚀 Quantum", "name_en": "🚀 Quantum", "price": 6999, "daily_limit": 1500, "image_generate": 50, "image_send": 50, "video_send": 15},
+        {"id": "quantum_pro", "name": "🔬 Quantum Pro", "name_en": "🔬 Quantum Pro", "price": 9499, "daily_limit": 2500, "image_generate": 50, "image_send": 50, "video_send": 50},
+        {"id": "quantum_infinite", "name": "🌌 Quantum Infinite", "name_en": "🌌 Quantum Infinite", "price": 49990, "daily_limit": 5000, "image_generate": 100, "image_send": 150, "video_send": 100},
     ]
+
+    # Referral settings
+    REFERRAL_REWARD_DAYS = 10  # VIP на 10 дней за каждого реферала
