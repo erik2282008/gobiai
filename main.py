@@ -1,12 +1,12 @@
 import asyncio
 import logging
 import uuid
+import json
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.client.default import DefaultBotProperties
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 from config import Config
 from database import db
@@ -557,116 +557,10 @@ async def handle_message(message: types.Message):
     finally:
         active_generations.pop(user_id, None)
 
-# ========== ВЕБХУК ДЛЯ YOOKASSA ==========
-async def yookassa_webhook(request):
-    try:
-        # Читаем тело запроса
-        body = await request.text()
-        data = json.loads(body)
-        
-        # Проверяем подпись (в тестовом режиме пропускаем)
-        signature = request.headers.get('X-Yookassa-Signature', '')
-        if not yookassa_service.verify_webhook_signature(body, signature) and not yookassa_service.secret_key.startswith('test_'):
-            return web.Response(status=400, text='Invalid signature')
-        
-        # Обрабатываем событие
-        if data.get('event') == 'payment.succeeded':
-            payment_id = data['object']['id']
-            metadata = data['object'].get('metadata', {})
-            
-            # Обновляем статус платежа в БД
-            db.update_payment_status(payment_id, 'succeeded')
-            
-            # Отправляем уведомление пользователю
-            payment = db.get_payment(payment_id)
-            if payment:
-                user = db.get_user(payment['user_id'])
-                if user:
-                    lang = user['language']
-                    
-                    if payment['type'] == 'subscription':
-                        success_text = {
-                            'ru': f"""✅ <b>Платеж подтвержден!</b>
-
-🎉 Ваша подписка активирована на 30 дней.
-💫 Теперь вам доступны новые AI-модели!""",
-                            'en': f"""✅ <b>Payment confirmed!</b>
-
-🎉 Your subscription has been activated for 30 days.
-💫 New AI models are now available!"""
-                        }
-                    
-                    elif payment['type'] == 'api_key':
-                        model = None
-                        for category_models in Config.AI_MODELS.values():
-                            for m in category_models:
-                                if m['id'] == payment['model_id']:
-                                    model = m
-                                    break
-                            if model:
-                                break
-                        
-                        model_name = model['name'] if lang == 'ru' else model['name_en'] if model else payment['model_id']
-                        
-                        success_text = {
-                            'ru': f"""✅ <b>Платеж за API-ключ подтвержден!</b>
-
-🤖 Модель: {model_name}
-💰 Сумма: {payment['amount']} руб
-
-📩 Для получения ключа напишите администратору: {Config.SUPPORT_USERNAME}""",
-                            'en': f"""✅ <b>API key payment confirmed!</b>
-
-🤖 Model: {model_name}
-💰 Amount: {payment['amount']} RUB
-
-📩 Contact administrator for your key: {Config.SUPPORT_USERNAME}"""
-                        }
-                    
-                    try:
-                        await bot.send_message(payment['user_id'], success_text[lang])
-                    except Exception as e:
-                        logger.error(f"Failed to send notification: {e}")
-        
-        return web.Response(status=200, text='OK')
-    
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return web.Response(status=500, text='Internal error')
-
-# ========== ЗАПУСК СЕРВЕРА ==========
-async def on_startup(bot: Bot):
-    await bot.set_webhook(f"https://{Config.WEBHOOK_DOMAIN}/webhook")
-
+# ========== ЗАПУСК БОТА (POLLING РЕЖИМ) ==========
 async def main():
-    # Создаем HTTP сервер для вебхуков
-    app = web.Application()
-    
-    # Настраиваем вебхук для бота
-    webhook_requests_handler = SimpleRequestHandler(
-        dispatcher=dp,
-        bot=bot,
-        secret_token="YOUR_SECRET_TOKEN"  # Можно задать любой
-    )
-    
-    webhook_requests_handler.register(app, path="/webhook")
-    
-    # Добавляем эндпоинт для YooKassa вебхука
-    app.router.add_post("/yookassa-webhook", yookassa_webhook)
-    
-    # Настраиваем приложение
-    setup_application(app, dp, bot=bot)
-    
-    # Запускаем сервер
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", Config.PORT)
-    
-    await site.start()
-    logger.info(f"Server started on port {Config.PORT}")
-    
-    # Бесконечный цикл
-    await asyncio.Event().wait()
+    logger.info("Starting bot in polling mode...")
+    await dp.start_polling(bot, skip_updates=True)
 
 if __name__ == "__main__":
     asyncio.run(main())
