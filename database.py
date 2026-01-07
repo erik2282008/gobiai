@@ -31,6 +31,10 @@ class Database:
                 referred_by INTEGER,
                 referral_count INTEGER DEFAULT 0,
                 referral_bonus_days INTEGER DEFAULT 0,
+                monthly_tokens_used INTEGER DEFAULT 0,
+                monthly_cost_incurred REAL DEFAULT 0,
+                last_cost_reset DATE DEFAULT CURRENT_DATE,
+                is_blocked BOOLEAN DEFAULT FALSE,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -48,6 +52,10 @@ class Database:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_subscription ON users(subscription)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)')
         
         self.conn.commit()
     
@@ -73,42 +81,52 @@ class Database:
                 'referral_code': user[12],
                 'referred_by': user[13],
                 'referral_count': user[14],
-                'referral_bonus_days': user[15]
+                'referral_bonus_days': user[15],
+                'monthly_tokens_used': user[16],
+                'monthly_cost_incurred': user[17],
+                'last_cost_reset': user[18],
+                'is_blocked': user[19]
             }
         return None
     
     def create_user(self, user_id, username, language='ru', referral_code=None):
         cursor = self.conn.cursor()
+        
+        # Если это реферал - даем LITE подписку на 10 дней
+        subscription = 'free'
+        subscription_end = None
         trial_end = (datetime.now() + timedelta(days=30 * Config.TRIAL_MONTHS)).strftime('%Y-%m-%d')
         
-        # Генерируем реферальный код
-        ref_code = f"ref_{user_id}"
-        
         referred_by = None
-        referral_bonus = 0
         
         if referral_code and referral_code.startswith('ref_'):
             try:
                 referred_by = int(referral_code.replace('ref_', ''))
-                # Добавляем бонусные дни пригласившему
+                # Даем LITE подписку на 10 дней рефералу
+                subscription = 'lite'
+                subscription_end = (datetime.now() + timedelta(days=10)).strftime('%Y-%m-%d')
+                trial_end = None
+                
+                # Обновляем статистику пригласившего и даем ему тоже LITE на 10 дней
                 cursor.execute('''
                     UPDATE users 
                     SET referral_count = referral_count + 1,
-                        referral_bonus_days = referral_bonus_days + ?
+                        subscription = 'lite',
+                        subscription_end = ?
                     WHERE user_id = ?
-                ''', (Config.REFERRAL_REWARD_DAYS, referred_by))
+                ''', (subscription_end, referred_by))
                 
-                # Даем бонус новому пользователю
-                referral_bonus = Config.REFERRAL_REWARD_DAYS
-                trial_end = (datetime.now() + timedelta(days=30 * Config.TRIAL_MONTHS + Config.REFERRAL_REWARD_DAYS)).strftime('%Y-%m-%d')
-            except:
+            except Exception as e:
                 referred_by = None
+        
+        # Генерируем реферальный код
+        ref_code = f"ref_{user_id}"
         
         cursor.execute('''
             INSERT OR REPLACE INTO users 
-            (user_id, username, language, trial_end, referral_code, referred_by, referral_bonus_days) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (user_id, username, language, trial_end, ref_code, referred_by, referral_bonus))
+            (user_id, username, language, subscription, subscription_end, trial_end, referral_code, referred_by) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, username, language, subscription, subscription_end, trial_end, ref_code, referred_by))
         
         self.conn.commit()
         return self.get_user(user_id)
@@ -182,11 +200,13 @@ class Database:
             cursor.execute('UPDATE users SET videos_sent_today = videos_sent_today + 1 WHERE user_id = ?', (user_id,))
         
         self.conn.commit()
-    
     def can_use_model(self, user_id):
         user = self.get_user(user_id)
         if not user:
             return False, "User not found"
+        
+        if user.get('is_blocked'):
+            return False, "Account blocked"
         
         today = datetime.now().strftime('%Y-%m-%d')
         if user['last_reset'] != today:
@@ -245,6 +265,53 @@ class Database:
             return False, f"Video send limit reached ({plan['video_send']}/day)"
         
         return True, ""
+    
+    def check_monthly_limits(self, user_id):
+        user = self.get_user(user_id)
+        if not user:
+            return False, "User not found"
+        
+        # Сброс счетчика в начале месяца
+        today = datetime.now()
+        first_day_of_month = today.replace(day=1)
+        if user['last_cost_reset'] != first_day_of_month.strftime('%Y-%m-%d'):
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                UPDATE users 
+                SET monthly_tokens_used = 0, 
+                    monthly_cost_incurred = 0,
+                    last_cost_reset = ?,
+                    is_blocked = FALSE
+                WHERE user_id = ?
+            ''', (first_day_of_month.strftime('%Y-%m-%d'), user_id))
+            self.conn.commit()
+            user = self.get_user(user_id)
+        
+        # Проверка лимитов
+        max_tokens = Config.MAX_MONTHLY_TOKENS.get(user['subscription'], 500000)
+        if user['monthly_tokens_used'] >= max_tokens:
+            cursor = self.conn.cursor()
+            cursor.execute('UPDATE users SET is_blocked = TRUE WHERE user_id = ?', (user_id,))
+            self.conn.commit()
+            return False, f"Monthly token limit reached ({max_tokens} tokens)"
+        
+        if user['monthly_cost_incurred'] >= Config.MAX_COST_PER_USER:
+            cursor = self.conn.cursor()
+            cursor.execute('UPDATE users SET is_blocked = TRUE WHERE user_id = ?', (user_id,))
+            self.conn.commit()
+            return False, "Monthly cost limit reached"
+        
+        return True, ""
+    
+    def update_usage_stats(self, user_id, tokens_used, cost_incurred):
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            UPDATE users 
+            SET monthly_tokens_used = monthly_tokens_used + ?,
+                monthly_cost_incurred = monthly_cost_incurred + ?
+            WHERE user_id = ?
+        ''', (tokens_used, cost_incurred, user_id))
+        self.conn.commit()
     
     def create_payment(self, payment_id, user_id, payment_type, plan_id=None, model_id=None, amount=0):
         cursor = self.conn.cursor()
