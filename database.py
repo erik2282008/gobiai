@@ -30,9 +30,9 @@ class Database:
                 referral_code TEXT UNIQUE,
                 referred_by INTEGER,
                 referral_count INTEGER DEFAULT 0,
-                referral_bonus_days INTEGER DEFAULT 0,
                 monthly_tokens_used INTEGER DEFAULT 0,
-                monthly_cost_incurred REAL DEFAULT 0,
+                monthly_input_tokens INTEGER DEFAULT 0,
+                monthly_output_tokens INTEGER DEFAULT 0,
                 last_cost_reset DATE DEFAULT CURRENT_DATE,
                 is_blocked BOOLEAN DEFAULT FALSE,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -81,9 +81,9 @@ class Database:
                 'referral_code': user[12],
                 'referred_by': user[13],
                 'referral_count': user[14],
-                'referral_bonus_days': user[15],
-                'monthly_tokens_used': user[16],
-                'monthly_cost_incurred': user[17],
+                'monthly_tokens_used': user[15],
+                'monthly_input_tokens': user[16],
+                'monthly_output_tokens': user[17],
                 'last_cost_reset': user[18],
                 'is_blocked': user[19]
             }
@@ -200,6 +200,7 @@ class Database:
             cursor.execute('UPDATE users SET videos_sent_today = videos_sent_today + 1 WHERE user_id = ?', (user_id,))
         
         self.conn.commit()
+    
     def can_use_model(self, user_id):
         user = self.get_user(user_id)
         if not user:
@@ -266,7 +267,8 @@ class Database:
         
         return True, ""
     
-    def check_monthly_limits(self, user_id):
+    def check_monthly_token_limits(self, user_id, input_tokens=0, output_tokens=0):
+        """Проверяет месячные лимиты токенов"""
         user = self.get_user(user_id)
         if not user:
             return False, "User not found"
@@ -279,7 +281,8 @@ class Database:
             cursor.execute('''
                 UPDATE users 
                 SET monthly_tokens_used = 0, 
-                    monthly_cost_incurred = 0,
+                    monthly_input_tokens = 0,
+                    monthly_output_tokens = 0,
                     last_cost_reset = ?,
                     is_blocked = FALSE
                 WHERE user_id = ?
@@ -287,30 +290,41 @@ class Database:
             self.conn.commit()
             user = self.get_user(user_id)
         
-        # Проверка лимитов
-        max_tokens = Config.MAX_MONTHLY_TOKENS.get(user['subscription'], 500000)
-        if user['monthly_tokens_used'] >= max_tokens:
-            cursor = self.conn.cursor()
-            cursor.execute('UPDATE users SET is_blocked = TRUE WHERE user_id = ?', (user_id,))
-            self.conn.commit()
-            return False, f"Monthly token limit reached ({max_tokens} tokens)"
+        # Лимиты для разных подписок (60% на ответы, 40% на вопросы)
+        if user['subscription'] == 'free':
+            max_total = 15000
+            max_input = int(max_total * 0.4)  # 6K
+            max_output = int(max_total * 0.6)  # 9K
+        else:
+            max_total = 850000
+            max_input = int(max_total * 0.4)  # 340K
+            max_output = int(max_total * 0.6)  # 510K
         
-        if user['monthly_cost_incurred'] >= Config.MAX_COST_PER_USER:
+        # Проверка лимитов
+        if user['monthly_tokens_used'] + input_tokens + output_tokens > max_total:
             cursor = self.conn.cursor()
             cursor.execute('UPDATE users SET is_blocked = TRUE WHERE user_id = ?', (user_id,))
             self.conn.commit()
-            return False, "Monthly cost limit reached"
+            return False, f"Monthly token limit reached ({max_total} tokens)"
+        
+        if user['monthly_input_tokens'] + input_tokens > max_input:
+            return False, f"Monthly input token limit reached ({max_input} tokens)"
+        
+        if user['monthly_output_tokens'] + output_tokens > max_output:
+            return False, f"Monthly output token limit reached ({max_output} tokens)"
         
         return True, ""
     
-    def update_usage_stats(self, user_id, tokens_used, cost_incurred):
+    def update_token_usage(self, user_id, input_tokens, output_tokens):
+        """Обновляет счетчики использованных токенов"""
         cursor = self.conn.cursor()
         cursor.execute('''
             UPDATE users 
             SET monthly_tokens_used = monthly_tokens_used + ?,
-                monthly_cost_incurred = monthly_cost_incurred + ?
+                monthly_input_tokens = monthly_input_tokens + ?,
+                monthly_output_tokens = monthly_output_tokens + ?
             WHERE user_id = ?
-        ''', (tokens_used, cost_incurred, user_id))
+        ''', (input_tokens + output_tokens, input_tokens, output_tokens, user_id))
         self.conn.commit()
     
     def create_payment(self, payment_id, user_id, payment_type, plan_id=None, model_id=None, amount=0):
