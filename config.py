@@ -78,7 +78,7 @@ class Config:
         "google/gemma-3-4b-it": 6,
     }
 
-    # Subscription plans with new limits
+    # Subscription plans with media limits
     SUBSCRIPTION_PLANS = [
         {"id": "free", "name": "🆓 Бесплатно", "name_en": "🆓 Free", "price": 0, "daily_limit": 100, "image_generate": 0, "image_send": 0, "video_send": 0},
         {"id": "lite", "name": "💎 Lite", "name_en": "💎 Lite", "price": 9, "daily_limit": 250, "image_generate": 1, "image_send": 3, "video_send": 1},
@@ -90,4 +90,4 @@ class Config:
     ]
 
     # Referral settings
-    REFERRAL_REWARD_DAYS = 10  # VIP на 10 дней за каждого реферала
+    REFERRAL_REWARD_DAYS = 10
