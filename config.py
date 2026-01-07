@@ -17,10 +17,10 @@ class Config:
     
     # Server
     PORT = int(os.getenv("PORT", "8000"))
-    WEBHOOK_DOMAIN = os.getenv("WEBHOOK_DOMAIN", "conceptual-loralyn-erikos-353df1d3.koyeb.app")
+    WEBHOOK_DOMAIN = os.getenv("WEBHOOK_DOMAIN", "corresponding-coletta-erikos-8a82819d.koyeb.app")
     
     # Limits
-    FREE_DAILY_LIMIT = 1000  # сообщений в день
+    FREE_DAILY_LIMIT = 1000
     TRIAL_MONTHS = 3
     CURRENCY = "RUB"
 
