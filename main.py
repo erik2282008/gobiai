@@ -4,15 +4,13 @@ import uuid
 import json
 import base64
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import (
     InlineKeyboardMarkup, 
     InlineKeyboardButton, 
-    BotCommand, 
-    BotCommandScopeDefault,
     ReplyKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardRemove
@@ -33,43 +31,36 @@ dp = Dispatcher()
 active_generations = {}
 user_conversations = {}
 
-# ========== ГЛАВНОЕ МЕНЮ-ПАНЕЛЬ ==========
+# ========== МЕНЮ-ПАНЕЛЬ ==========
 def get_main_reply_keyboard(lang='ru'):
-    """Основная панель меню внизу экрана"""
     if lang == 'ru':
         return ReplyKeyboardMarkup(
             keyboard=[
                 [KeyboardButton(text="🧠 Выбрать модель"), KeyboardButton(text="👤 Мой профиль")],
                 [KeyboardButton(text="💳 Купить подписку"), KeyboardButton(text="🔑 Купить API")],
+                [KeyboardButton(text="🎨 Сгенерировать фото"), KeyboardButton(text="📤 Рефералка")],
                 [KeyboardButton(text="🆘 Помощь"), KeyboardButton(text="⏹️ Остановить")]
             ],
-            resize_keyboard=True,
-            input_field_placeholder="Выберите действие..."
+            resize_keyboard=True
         )
     else:
         return ReplyKeyboardMarkup(
             keyboard=[
                 [KeyboardButton(text="🧠 Choose model"), KeyboardButton(text="👤 My profile")],
                 [KeyboardButton(text="💳 Buy subscription"), KeyboardButton(text="🔑 Buy API")],
+                [KeyboardButton(text="🎨 Generate image"), KeyboardButton(text="📤 Referral")],
                 [KeyboardButton(text="🆘 Help"), KeyboardButton(text="⏹️ Stop")]
             ],
-            resize_keyboard=True,
-            input_field_placeholder="Choose action..."
+            resize_keyboard=True
         )
 
-def remove_reply_keyboard():
-    """Убрать панель меню"""
-    return ReplyKeyboardRemove()
-
-# ========== INLINE КЛАВИАТУРЫ ДЛЯ ВЫБОРА ==========
 def get_lang_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang_ru")],
         [InlineKeyboardButton(text="🇺🇸 English", callback_data="lang_en")]
     ])
 
-def get_models_list_keyboard(user_subscription, lang='ru'):
-    """Клавиатура со списком моделей с описанием"""
+def get_models_keyboard(user_subscription, lang='ru'):
     keyboard = []
     available_categories = Config.SUBSCRIPTION_ACCESS.get(user_subscription, ['free'])
     
@@ -82,11 +73,10 @@ def get_models_list_keyboard(user_subscription, lang='ru'):
                     InlineKeyboardButton(text="✅ Выбрать", callback_data=f"model_{model['id']}")
                 ])
     
-    keyboard.append([InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_menu")])
+    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-def get_subscription_plans_keyboard(lang='ru'):
-    """Клавиатура с планами подписок"""
+def get_subscription_keyboard(lang='ru'):
     keyboard = []
     for plan in Config.SUBSCRIPTION_PLANS[1:]:
         name = plan['name'] if lang == 'ru' else plan['name_en']
@@ -95,11 +85,10 @@ def get_subscription_plans_keyboard(lang='ru'):
             InlineKeyboardButton(text="💳 Купить", callback_data=f"sub_{plan['id']}")
         ])
     
-    keyboard.append([InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_menu")])
+    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-def get_api_models_keyboard(lang='ru'):
-    """Клавиатура с API моделями"""
+def get_api_key_keyboard(lang='ru'):
     keyboard = []
     for model_id, price in Config.API_KEY_PRICES.items():
         model = None
@@ -117,8 +106,26 @@ def get_api_models_keyboard(lang='ru'):
                 InlineKeyboardButton(text="🔑 Купить", callback_data=f"api_{model_id}")
             ])
     
-    keyboard.append([InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_menu")])
+    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_referral_keyboard(lang='ru'):
+    if lang == 'ru':
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📤 Поделиться ссылкой", callback_data="share_ref")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")]
+        ])
+    else:
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📤 Share link", callback_data="share_ref")],
+            [InlineKeyboardButton(text="🔙 Back", callback_data="back_to_menu")]
+        ])
+
+def get_generate_image_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎨 Сгенерировать изображение", callback_data="generate_image")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")]
+    ])
 
 def get_stop_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⏹️ Остановить генерацию", callback_data="stop_generation")]])
@@ -129,13 +136,12 @@ def get_payment_check_keyboard(payment_id):
         [InlineKeyboardButton(text="🔙 Отмена", callback_data="back_to_menu")]
     ])
 
-# ========== ТЕКСТЫ С ОПИСАНИЯМИ ==========
+# ========== ТЕКСТЫ ==========
 def get_model_info_text(model, lang='ru'):
-    """Текст с подробным описанием модели"""
     if lang == 'ru':
         return f"""🤖 <b>{model['name']}</b>
 
-📝 <i>{model['description_ru']}</i>
+📝 {model['description_ru']}
 
 <b>Вход:</b> {model['input']}
 <b>Выход:</b> {model['output']}
@@ -143,13 +149,11 @@ def get_model_info_text(model, lang='ru'):
 <b>Поддерживает:</b>
 {"✅ Изображения" if model['supports_images'] else "❌ Изображения"}
 {"✅ Видео" if model['supports_video'] else "❌ Видео"} 
-{"✅ Аудио" if model['supports_audio'] else "❌ Аудио"}
-
-<b>Для:</b> {model['input'].replace('Текст', 'текстовых').replace('Изображения', 'изображений').replace('Аудио', 'аудио').replace('Видео', 'видео')} задач"""
+{"✅ Аудио" if model['supports_audio'] else "❌ Аудио"}"""
     else:
         return f"""🤖 <b>{model['name_en']}</b>
 
-📝 <i>{model['description_en']}</i>
+📝 {model['description_en']}
 
 <b>Input:</b> {model['input']}
 <b>Output:</b> {model['output']}
@@ -157,48 +161,36 @@ def get_model_info_text(model, lang='ru'):
 <b>Supports:</b>
 {"✅ Images" if model['supports_images'] else "❌ Images"}
 {"✅ Video" if model['supports_video'] else "❌ Video"} 
-{"✅ Audio" if model['supports_audio'] else "❌ Audio"}
-
-<b>For:</b> {model['input'].replace('Text', 'text').replace('Images', 'images').replace('Audio', 'audio').replace('Video', 'video')} tasks"""
+{"✅ Audio" if model['supports_audio'] else "❌ Audio"}"""
 
 def get_plan_info_text(plan, lang='ru'):
-    """Текст с описанием подписки"""
     available_models = []
     for category in Config.SUBSCRIPTION_ACCESS.get(plan['id'], []):
         if category in Config.AI_MODELS:
             available_models.extend([m['name'] if lang == 'ru' else m['name_en'] for m in Config.AI_MODELS[category]])
     
-    target_users = {
-        'lite': 'Начинающие пользователи, студенты',
-        'vip': 'Опытные пользователи, фрилансеры', 
-        'vip_plus': 'Профессионалы, блогеры',
-        'quantum': 'Разработчики, исследователи',
-        'quantum_pro': 'Премиум пользователи, стартапы',
-        'quantum_infinite': 'Корпоративные клиенты, предприятия'
-    }
-    
     if lang == 'ru':
         return f"""💎 <b>{plan['name']}</b>
 
-💰 <b>Цена:</b> {plan['price']} руб/месяц
-📈 <b>Лимит:</b> {plan['daily_limit']} сообщений/день
+💰 Цена: {plan['price']} руб/месяц
+📈 Лимит сообщений: {plan['daily_limit']}/день
+🖼️ Генерация изображений: {plan['image_generate']}/день
+📤 Отправка изображений: {plan['image_send']}/день
+🎥 Отправка видео: {plan['video_send']}/день
 
 <b>Доступные модели:</b>
-{', '.join(available_models) if available_models else 'Все базовые модели'}
-
-<b>Для кого:</b>
-{target_users.get(plan['id'], 'Все пользователи')}"""
+{', '.join(available_models[:3])}{'...' if len(available_models) > 3 else ''}"""
     else:
         return f"""💎 <b>{plan['name_en']}</b>
 
-💰 <b>Price:</b> {plan['price']} RUB/month
-📈 <b>Limit:</b> {plan['daily_limit']} messages/day
+💰 Price: {plan['price']} RUB/month
+📈 Message limit: {plan['daily_limit']}/day
+🖼️ Image generation: {plan['image_generate']}/day
+📤 Image sending: {plan['image_send']}/day
+🎥 Video sending: {plan['video_send']}/day
 
 <b>Available models:</b>
-{', '.join(available_models) if available_models else 'All basic models'}
-
-<b>For:</b>
-{target_users.get(plan['id'], 'All users')}"""
+{', '.join(available_models[:3])}{'...' if len(available_models) > 3 else ''}"""
 
 async def check_payment_status(payment_id, yookassa_id, user_id):
     try:
@@ -212,8 +204,8 @@ async def check_payment_status(payment_id, yookassa_id, user_id):
             if payment['type'] == 'subscription':
                 db.update_user_subscription(user_id, payment['plan_id'])
                 success_text = {
-                    'ru': "✅ <b>Платеж подтвержден!</b>\n\n🎉 Ваша подписка активирована на 30 дней!",
-                    'en': "✅ <b>Payment confirmed!</b>\n\n🎉 Your subscription activated for 30 days!"
+                    'ru': "✅ <b>Платеж подтвержден! Подписка активирована на 30 дней.</b>",
+                    'en': "✅ <b>Payment confirmed! Subscription activated for 30 days.</b>"
                 }
             else:
                 model_name = payment['model_id']
@@ -223,8 +215,8 @@ async def check_payment_status(payment_id, yookassa_id, user_id):
                             model_name = model['name'] if lang == 'ru' else model['name_en']
                             break
                 success_text = {
-                    'ru': f"✅ <b>Платеж подтвержден!</b>\n\n🤖 Модель: {model_name}\n📩 Обратитесь к {Config.SUPPORT_USERNAME} для получения ключа",
-                    'en': f"✅ <b>Payment confirmed!</b>\n\n🤖 Model: {model_name}\n📩 Contact {Config.SUPPORT_USERNAME} for your key"
+                    'ru': f"✅ <b>Платеж подтвержден!</b>\n\nДля получения API-ключа обратитесь к {Config.SUPPORT_USERNAME}",
+                    'en': f"✅ <b>Payment confirmed!</b>\n\nContact {Config.SUPPORT_USERNAME} for your API key"
                 }
             
             await bot.send_message(user_id, success_text[lang])
@@ -234,26 +226,99 @@ async def check_payment_status(payment_id, yookassa_id, user_id):
         logger.error(f"Payment check error: {e}")
         return False
 
+# ========== ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ ==========
+@dp.message(F.text == "🎨 Сгенерировать фото")
+@dp.message(F.text == "🎨 Generate image")
+async def handle_generate_image_menu(message: types.Message):
+    user = db.get_user(message.from_user.id)
+    if not user: 
+        await message.answer("❌ Сначала используйте /start")
+        return
+        
+    lang = user['language']
+    text = {
+        'ru': "🎨 <b>Генерация изображений</b>\n\nОтправьте текстовое описание для генерации изображения",
+        'en': "🎨 <b>Image Generation</b>\n\nSend text description to generate image"
+    }
+    await message.answer(text[lang])
+
+@dp.message(F.text.startswith("/generate"))
+async def handle_generate_command(message: types.Message):
+    user = db.get_user(message.from_user.id)
+    if not user: 
+        await message.answer("❌ Сначала используйте /start")
+        return
+        
+    prompt = message.text.replace("/generate", "").strip()
+    if not prompt:
+        await message.answer("❌ Укажите описание для генерации изображения")
+        return
+    
+    # Проверяем лимиты генерации изображений
+    can_generate, error_msg = db.can_generate_image(user['user_id'])
+    if not can_generate:
+        await message.answer(f"❌ {error_msg}")
+        return
+    
+    lang = user['language']
+    wait_text = {
+        'ru': "🎨 <b>Генерация изображения...</b>",
+        'en': "🎨 <b>Generating image...</b>"
+    }
+    
+    msg = await message.answer(wait_text[lang], reply_markup=get_stop_keyboard())
+    active_generations[message.from_user.id] = True
+    
+    try:
+        result = await routerai_service.generate_image(prompt)
+        
+        if result['success'] and active_generations.get(message.from_user.id):
+            # Обновляем счетчик генераций
+            db.update_media_usage(user['user_id'], 'image_generate')
+            
+            if result.get('image_data'):
+                # Отправляем сгенерированное изображение
+                image_data = base64.b64decode(result['image_data'])
+                await message.answer_photo(
+                    types.BufferedInputFile(image_data, filename="generated_image.jpg"),
+                    caption="🎨 <b>Сгенерированное изображение</b>"
+                )
+                await msg.delete()
+            else:
+                await msg.edit_text("✅ <b>Изображение сгенерировано!</b>")
+        elif not result['success']:
+            await msg.edit_text(f"❌ <b>Ошибка генерации:</b>\n\n{result['error']}")
+            
+    except Exception as e:
+        await msg.edit_text("❌ <b>Ошибка при генерации изображения</b>")
+    finally:
+        active_generations.pop(message.from_user.id, None)
+
 # ========== ОСНОВНЫЕ ОБРАБОТЧИКИ ==========
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
+    referral_code = None
+    if len(message.text.split()) > 1:
+        referral_code = message.text.split()[1]
+    
     user = db.get_user(message.from_user.id)
     if not user:
-        await message.answer(
-            "👋 <b>Добро пожаловать в GobiAI!</b>\n\nВыберите язык для продолжения:",
-            reply_markup=get_lang_keyboard()
-        )
+        user = db.create_user(message.from_user.id, message.from_user.username, 'ru', referral_code)
+        
+        welcome_text = f"""👋 <b>Добро пожаловать в GobiAI!</b>
+
+✨ <b>Бесплатный триал на {Config.TRIAL_MONTHS} месяца активирован!</b>"""
+        
+        if user['referred_by']:
+            welcome_text += f"\n\n🎁 +{Config.REFERRAL_REWARD_DAYS} дней VIP за регистрацию по реферальной ссылке!"
+        
+        await message.answer(welcome_text, reply_markup=get_main_reply_keyboard('ru'))
     else:
-        lang = user['language']
-        welcome_text = {
-            'ru': "👋 <b>С возвращением в GobiAI!</b>\n\nИспользуйте панель меню внизу для навигации.",
-            'en': "👋 <b>Welcome back to GobiAI!</b>\n\nUse the menu panel below for navigation."
-        }
-        await message.answer(welcome_text[lang], reply_markup=get_main_reply_keyboard(lang))
+        await message.answer("👋 <b>С возвращением!</b>", reply_markup=get_main_reply_keyboard(user['language']))
 
 @dp.message(F.text == "🧠 Выбрать модель")
 @dp.message(F.text == "🧠 Choose model")
-async def handle_models_menu(message: types.Message):
+async def handle_models(message: types.Message):
     user = db.get_user(message.from_user.id)
     if not user: 
         await message.answer("❌ Сначала используйте /start")
@@ -262,13 +327,13 @@ async def handle_models_menu(message: types.Message):
     lang = user['language']
     text = {
         'ru': "🤖 <b>Выберите AI-модель</b>\n\nℹ️ - информация о модели\n✅ - выбрать модель",
-        'en': "🤖 <b>Choose AI model</b>\n\nℹ️ - model info\n✅ - select model"
+        'en': "🤖 <b>Choose AI model</b>\n\nℹ️ - model information\n✅ - select model"
     }
-    await message.answer(text[lang], reply_markup=get_models_list_keyboard(user['subscription'], lang))
+    await message.answer(text[lang], reply_markup=get_models_keyboard(user['subscription'], lang))
 
 @dp.message(F.text == "👤 Мой профиль")
 @dp.message(F.text == "👤 My profile")
-async def handle_profile_menu(message: types.Message):
+async def handle_profile(message: types.Message):
     user = db.get_user(message.from_user.id)
     if not user: 
         await message.answer("❌ Сначала используйте /start")
@@ -291,17 +356,33 @@ async def handle_profile_menu(message: types.Message):
         'ru': f"""👤 <b>Ваш профиль</b>
 
 💎 Подписка: {plan['name'] if plan else 'Free'}
-📅 Дней до конца: {days_left}
-🎁 Триал: {trial_days_left} дней
-📊 Использовано: {user['daily_used']}/{plan['daily_limit'] if plan else 100}
-🤖 Модель: {user['current_model']}""",
+📅 Дней до конца подписки: {days_left}
+🎁 Дней до конца триала: {trial_days_left}
+👥 Приглашено рефералов: {user['referral_count']}
+🎁 Бонусных дней: {user['referral_bonus_days']}
+
+📊 <b>Использовано сегодня:</b>
+Сообщения: {user['daily_used']}/{plan['daily_limit'] if plan else 100}
+Сгенерировано изображений: {user['images_generated_today']}/{plan['image_generate'] if plan else 0}
+Отправлено изображений: {user['images_sent_today']}/{plan['image_send'] if plan else 0}
+Отправлено видео: {user['videos_sent_today']}/{plan['video_send'] if plan else 0}
+
+🤖 Текущая модель: {user['current_model']}""",
         'en': f"""👤 <b>Your Profile</b>
 
 💎 Subscription: {plan['name_en'] if plan else 'Free'}
-📅 Days left: {days_left}
-🎁 Trial: {trial_days_left} days
-📊 Used: {user['daily_used']}/{plan['daily_limit'] if plan else 100}
-🤖 Model: {user['current_model']}"""
+📅 Days until subscription end: {days_left}
+🎁 Days until trial end: {trial_days_left}
+👥 Referrals invited: {user['referral_count']}
+🎁 Bonus days: {user['referral_bonus_days']}
+
+📊 <b>Used today:</b>
+Messages: {user['daily_used']}/{plan['daily_limit'] if plan else 100}
+Images generated: {user['images_generated_today']}/{plan['image_generate'] if plan else 0}
+Images sent: {user['images_sent_today']}/{plan['image_send'] if plan else 0}
+Videos sent: {user['videos_sent_today']}/{plan['video_send'] if plan else 0}
+
+🤖 Current model: {user['current_model']}"""
     }
     await message.answer(profile_text[lang])
 
@@ -316,9 +397,9 @@ async def handle_buy_subscription(message: types.Message):
     lang = user['language']
     text = {
         'ru': "💎 <b>Выберите подписку</b>\n\nℹ️ - информация о плане\n💳 - купить подписку",
-        'en': "💎 <b>Choose subscription</b>\n\nℹ️ - plan info\n💳 - buy subscription"
+        'en': "💎 <b>Choose subscription</b>\n\nℹ️ - plan information\n💳 - buy subscription"
     }
-    await message.answer(text[lang], reply_markup=get_subscription_plans_keyboard(lang))
+    await message.answer(text[lang], reply_markup=get_subscription_keyboard(lang))
 
 @dp.message(F.text == "🔑 Купить API")
 @dp.message(F.text == "🔑 Buy API")
@@ -331,13 +412,48 @@ async def handle_buy_api(message: types.Message):
     lang = user['language']
     text = {
         'ru': "🔑 <b>Купить API-ключ</b>\n\nℹ️ - информация о модели\n🔑 - купить API-ключ",
-        'en': "🔑 <b>Buy API Key</b>\n\nℹ️ - model info\n🔑 - buy API key"
+        'en': "🔑 <b>Buy API Key</b>\n\nℹ️ - model information\n🔑 - buy API key"
     }
-    await message.answer(text[lang], reply_markup=get_api_models_keyboard(lang))
+    await message.answer(text[lang], reply_markup=get_api_key_keyboard(lang))
+
+@dp.message(F.text == "📤 Рефералка")
+@dp.message(F.text == "📤 Referral")
+async def handle_referral(message: types.Message):
+    user = db.get_user(message.from_user.id)
+    if not user: 
+        await message.answer("❌ Сначала используйте /start")
+        return
+        
+    lang = user['language']
+    ref_text = {
+        'ru': f"""📤 <b>Реферальная система</b>
+
+👥 Приглашено пользователей: {user['referral_count']}
+🎁 Бонусных дней: {user['referral_bonus_days']}
+
+💎 <b>За каждого приглашенного:</b>
+• Вы получаете +{Config.REFERRAL_REWARD_DAYS} дней VIP
+• Приглашенный получает +{Config.REFERRAL_REWARD_DAYS} дней VIP
+
+🔗 <b>Ваша реферальная ссылка:</b>
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}""",
+        'en': f"""📤 <b>Referral System</b>
+
+👥 Users invited: {user['referral_count']}
+🎁 Bonus days: {user['referral_bonus_days']}
+
+💎 <b>For each invited user:</b>
+• You get +{Config.REFERRAL_REWARD_DAYS} days VIP
+• Invited user gets +{Config.REFERRAL_REWARD_DAYS} days VIP
+
+🔗 <b>Your referral link:</b>
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}"""
+    }
+    await message.answer(ref_text[lang], reply_markup=get_referral_keyboard(lang))
 
 @dp.message(F.text == "🆘 Помощь")
 @dp.message(F.text == "🆘 Help")
-async def handle_help_menu(message: types.Message):
+async def handle_help(message: types.Message):
     user = db.get_user(message.from_user.id)
     lang = user['language'] if user else 'ru'
     
@@ -349,8 +465,14 @@ async def handle_help_menu(message: types.Message):
 👤 Мой профиль - информация о подписке и лимитах
 💳 Купить подписку - выбор и покупка подписок
 🔑 Купить API - приобретение API-ключей
+🎨 Сгенерировать фото - генерация изображений по описанию
+📤 Рефералка - реферальная система
 🆘 Помощь - эта справка
 ⏹️ Остановить - прекращение текущей генерации
+
+<b>Команды:</b>
+/start - начать работу с ботом
+/generate [описание] - сгенерировать изображение
 
 <b>Поддержка:</b> {Config.SUPPORT_USERNAME}""",
         'en': f"""🆘 <b>GobiAI Help</b>
@@ -360,8 +482,14 @@ async def handle_help_menu(message: types.Message):
 👤 My profile - subscription info and limits
 💳 Buy subscription - choose and buy subscriptions
 🔑 Buy API - purchase API keys
+🎨 Generate image - generate images from text
+📤 Referral - referral system
 🆘 Help - this help information
 ⏹️ Stop - stop current generation
+
+<b>Commands:</b>
+/start - start working with bot
+/generate [description] - generate image
 
 <b>Support:</b> {Config.SUPPORT_USERNAME}"""
     }
@@ -369,10 +497,14 @@ async def handle_help_menu(message: types.Message):
 
 @dp.message(F.text == "⏹️ Остановить")
 @dp.message(F.text == "⏹️ Stop")
-async def handle_stop_menu(message: types.Message):
+async def handle_stop(message: types.Message):
     if message.from_user.id in active_generations:
         active_generations[message.from_user.id] = False
-        await message.answer("⏹️ Генерация остановлена")
+        stop_text = {
+            'ru': "⏹️ <b>Генерация остановлена</b>",
+            'en': "⏹️ <b>Generation stopped</b>"
+        }
+        await message.answer(stop_text['ru'])
 
 # ========== CALLBACK ОБРАБОТЧИКИ ==========
 @dp.callback_query(F.data == "lang_ru")
@@ -448,10 +580,10 @@ async def show_api_info(callback: types.CallbackQuery):
     if model:
         user = db.get_user(callback.from_user.id)
         lang = user['language'] if user else 'ru'
-        api_price = Config.API_KEY_PRICES.get(model_id, 0)
+        price = Config.API_KEY_PRICES.get(model_id, 0)
         api_text = {
-            'ru': f"{get_model_info_text(model, lang)}\n\n💰 <b>Цена API-ключа:</b> {api_price} руб (750K токенов)",
-            'en': f"{get_model_info_text(model, lang)}\n\n💰 <b>API Key Price:</b> {api_price} RUB (750K tokens)"
+            'ru': f"{get_model_info_text(model, lang)}\n\n💰 <b>Цена API-ключа:</b> {price} руб (750K токенов)",
+            'en': f"{get_model_info_text(model, lang)}\n\n💰 <b>API Key Price:</b> {price} RUB (750K tokens)"
         }
         await callback.message.answer(api_text[lang])
     await callback.answer()
@@ -474,7 +606,11 @@ async def select_model(callback: types.CallbackQuery):
                 break
     
     lang = user['language']
-    await callback.message.answer(f"✅ <b>Модель {model_name} выбрана!</b>\n\nТеперь отправляйте сообщения для генерации.")
+    success_text = {
+        'ru': f"✅ <b>Модель {model_name} выбрана!</b>\n\nТеперь отправляйте сообщения для генерации.",
+        'en': f"✅ <b>Model {model_name} selected!</b>\n\nNow send messages for generation."
+    }
+    await callback.message.answer(success_text[lang])
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("sub_"))
@@ -502,6 +638,9 @@ async def process_subscription(callback: types.CallbackQuery):
 💰 Сумма: {plan['price']} руб
 📅 Срок: 30 дней
 📊 Лимит: {plan['daily_limit']} сообщений/день
+🖼️ Генерация изображений: {plan['image_generate']}/день
+📤 Отправка изображений: {plan['image_send']}/день
+🎥 Отправка видео: {plan['video_send']}/день
 
 👉 <a href="{result['confirmation_url']}">Перейти к оплате</a>
 
@@ -511,6 +650,9 @@ async def process_subscription(callback: types.CallbackQuery):
 💰 Amount: {plan['price']} RUB
 📅 Duration: 30 days
 📊 Limit: {plan['daily_limit']} messages/day
+🖼️ Image generation: {plan['image_generate']}/day
+📤 Image sending: {plan['image_send']}/day
+🎥 Video sending: {plan['video_send']}/day
 
 👉 <a href="{result['confirmation_url']}">Proceed to payment</a>
 
@@ -597,7 +739,49 @@ async def check_payment(callback: types.CallbackQuery):
     
     result = await check_payment_status(payment_id, payment['yookassa_payment_id'], payment['user_id'])
     if not result:
-        await callback.message.answer("❌ <b>Платеж еще не подтвержден</b>\n\nПожалуйста, подождите несколько минут и попробуйте снова.", reply_markup=get_payment_check_keyboard(payment_id))
+        not_paid_text = {
+            'ru': "❌ <b>Платеж еще не подтвержден</b>\n\nПожалуйста, подождите несколько минут и попробуйте снова.",
+            'en': "❌ <b>Payment not confirmed yet</b>\n\nPlease wait a few minutes and try again."
+        }
+        await callback.message.answer(not_paid_text[lang], reply_markup=get_payment_check_keyboard(payment_id))
+    await callback.answer()
+
+@dp.callback_query(F.data == "share_ref")
+async def share_referral(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    if not user: 
+        await callback.answer("Сначала используйте /start")
+        return
+        
+    ref_text = {
+        'ru': f"""📤 <b>Поделиться реферальной ссылкой</b>
+
+🔗 Ваша ссылка:
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}
+
+💎 Приглашайте друзей и получайте бонусы!""",
+        'en': f"""📤 <b>Share referral link</b>
+
+🔗 Your link:
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}
+
+💎 Invite friends and get bonuses!"""
+    }
+    await callback.message.answer(ref_text[user['language']])
+    await callback.answer()
+
+@dp.callback_query(F.data == "generate_image")
+async def generate_image_menu(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    if not user: 
+        await callback.answer("Сначала используйте /start")
+        return
+        
+    text = {
+        'ru': "🎨 <b>Генерация изображений</b>\n\nИспользуйте команду /generate с описанием:\n\n<code>/generate красная спортивная машина в горах</code>",
+        'en': "🎨 <b>Image Generation</b>\n\nUse /generate command with description:\n\n<code>/generate red sports car in mountains</code>"
+    }
+    await callback.message.answer(text[user['language']])
     await callback.answer()
 
 @dp.callback_query(F.data == "stop_generation")
@@ -606,7 +790,11 @@ async def stop_generation(callback: types.CallbackQuery):
         active_generations[callback.from_user.id] = False
         user = db.get_user(callback.from_user.id)
         lang = user['language'] if user else 'ru'
-        await callback.message.answer("⏹️ Генерация остановлена", reply_markup=get_main_reply_keyboard(lang))
+        stop_text = {
+            'ru': "⏹️ <b>Генерация остановлена</b>",
+            'en': "⏹️ <b>Generation stopped</b>"
+        }
+        await callback.message.answer(stop_text[lang])
     await callback.answer()
 
 # ========== ОБРАБОТКА СООБЩЕНИЙ ДЛЯ AI ==========
@@ -617,14 +805,24 @@ async def handle_photo(message: types.Message):
         await message.answer("❌ Сначала используйте /start")
         return
         
+    # Проверяем лимиты отправки изображений
+    can_send, error_msg = db.can_send_image(user['user_id'])
+    if not can_send: 
+        lang = user['language']
+        await message.answer(f"❌ {error_msg}")
+        return
+        
+    # Проверяем общие лимиты
     can_use, error_msg = db.can_use_model(user['user_id'])
     if not can_use: 
         lang = user['language']
-        await message.answer(f"❌ <b>Лимит исчерпан</b>\n\n{error_msg}")
+        await message.answer(f"❌ {error_msg}")
         return
         
     db.increment_daily_usage(user['user_id'])
+    db.update_media_usage(user['user_id'], 'image_send')
     
+    # Проверяем поддерживает ли текущая модель изображения
     current_model_supports_images = False
     for category_models in Config.AI_MODELS.values():
         for model in category_models:
@@ -634,31 +832,47 @@ async def handle_photo(message: types.Message):
     
     if not current_model_supports_images:
         lang = user['language']
-        await message.answer("❌ Текущая модель не поддерживает изображения")
+        error_text = {
+            'ru': "❌ Текущая модель не поддерживает изображения",
+            'en': "❌ Current model doesn't support images"
+        }
+        await message.answer(error_text[lang])
         return
     
+    # Скачиваем изображение
     file = await bot.get_file(message.photo[-1].file_id)
     file_path = await bot.download_file(file.file_path)
     image_data = base64.b64encode(file_path.read()).decode('utf-8')
     
     lang = user['language']
-    msg = await message.answer("⏳ <b>Обработка изображения...</b>", reply_markup=get_stop_keyboard())
+    wait_text = {
+        'ru': "⏳ <b>Обработка изображения...</b>",
+        'en': "⏳ <b>Processing image...</b>"
+    }
+    
+    msg = await message.answer(wait_text[lang], reply_markup=get_stop_keyboard())
     active_generations[message.from_user.id] = True
     
     try:
         result = await routerai_service.send_message(
             user['current_model'], 
-            message.caption or "Опиши это изображение", 
+            message.caption or "Опиши это изображение",
             extra_data={"image": image_data}
         )
         
         if result['success'] and active_generations.get(message.from_user.id):
-            await msg.edit_text(f"🤖 <b>Ответ:</b>\n\n{result['response']}")
+            response_text = f"🤖 <b>Ответ:</b>\n\n{result['response']}"
+            await msg.edit_text(response_text)
         elif not result['success']:
-            await msg.edit_text(f"❌ <b>Ошибка:</b>\n\n{result['error']}")
+            error_text = f"❌ <b>Ошибка:</b>\n\n{result['error']}"
+            await msg.edit_text(error_text)
             
     except Exception as e:
-        await msg.edit_text("❌ <b>Ошибка обработки изображения</b>")
+        error_text = {
+            'ru': "❌ <b>Ошибка обработки изображения</b>",
+            'en': "❌ <b>Image processing error</b>"
+        }
+        await msg.edit_text(error_text[lang])
     finally:
         active_generations.pop(message.from_user.id, None)
 
@@ -669,10 +883,11 @@ async def handle_message(message: types.Message):
         await message.answer("❌ Сначала используйте /start")
         return
         
+    # Проверяем общие лимиты
     can_use, error_msg = db.can_use_model(user['user_id'])
     if not can_use: 
         lang = user['language']
-        await message.answer(f"❌ <b>Лимит исчерпан</b>\n\n{error_msg}")
+        await message.answer(f"❌ {error_msg}")
         return
         
     db.increment_daily_usage(user['user_id'])
@@ -686,7 +901,12 @@ async def handle_message(message: types.Message):
         user_conversations[user_id] = user_conversations[user_id][-10:]
     
     lang = user['language']
-    msg = await message.answer("⏳ <b>Генерация началась...</b>", reply_markup=get_stop_keyboard())
+    wait_text = {
+        'ru': "⏳ <b>Генерация началась...</b>",
+        'en': "⏳ <b>Generation started...</b>"
+    }
+    
+    msg = await message.answer(wait_text[lang], reply_markup=get_stop_keyboard())
     active_generations[user_id] = True
     
     try:
@@ -698,12 +918,18 @@ async def handle_message(message: types.Message):
         
         if result['success'] and active_generations.get(user_id):
             user_conversations[user_id].append({"role": "assistant", "content": result['response']})
-            await msg.edit_text(f"🤖 <b>Ответ:</b>\n\n{result['response']}")
+            response_text = f"🤖 <b>Ответ:</b>\n\n{result['response']}"
+            await msg.edit_text(response_text)
         elif not result['success']:
-            await msg.edit_text(f"❌ <b>Ошибка:</b>\n\n{result['error']}")
+            error_text = f"❌ <b>Ошибка:</b>\n\n{result['error']}"
+            await msg.edit_text(error_text)
             
     except Exception as e:
-        await msg.edit_text("❌ <b>Ошибка соединения</b>\n\nПопробуйте позже.")
+        error_text = {
+            'ru': "❌ <b>Ошибка соединения</b>\n\nПопробуйте позже.",
+            'en': "❌ <b>Connection error</b>\n\nPlease try again later."
+        }
+        await msg.edit_text(error_text[lang])
     finally:
         active_generations.pop(user_id, None)
 
@@ -763,7 +989,9 @@ async def start_webhook_server():
     return runner
 
 async def main():
-    logger.info("Starting GobiAI bot...")
+    logger.info("Starting GobiAI bot with full functionality...")
+    
+    # Запускаем сервер для вебхуков
     runner = await start_webhook_server()
     
     logger.info("Starting bot in polling mode...")
