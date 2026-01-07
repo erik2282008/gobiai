@@ -4,7 +4,6 @@ import hashlib
 import hmac
 import json
 import aiohttp
-from datetime import datetime
 from config import Config
 
 class YooKassaService:
@@ -15,7 +14,6 @@ class YooKassaService:
         self.auth = base64.b64encode(f"{self.shop_id}:{self.secret_key}".encode()).decode()
     
     async def create_payment(self, amount, description, return_url, metadata=None):
-        """Создает платеж в YooKassa"""
         payment_id = str(uuid.uuid4())
         
         payload = {
@@ -64,7 +62,6 @@ class YooKassaService:
                     }
     
     async def get_payment_status(self, payment_id):
-        """Получает статус платежа"""
         headers = {
             "Authorization": f"Basic {self.auth}"
         }
@@ -89,8 +86,6 @@ class YooKassaService:
                     }
     
     def verify_webhook_signature(self, body, signature):
-        """Проверяет подпись вебхука от YooKassa"""
-        # Для тестового режима пропускаем проверку подписи
         if self.secret_key.startswith('test_'):
             return True
             
@@ -103,7 +98,6 @@ class YooKassaService:
         return signature_calculated == signature
     
     async def create_subscription_payment(self, user_id, plan_id, plan_name, amount, lang='ru'):
-        """Создает платеж для подписки"""
         description_ru = f"Подписка {plan_name} на AI-модели"
         description_en = f"Subscription {plan_name} for AI models"
         description = description_ru if lang == 'ru' else description_en
@@ -120,7 +114,6 @@ class YooKassaService:
         return await self.create_payment(amount, description, return_url, metadata)
     
     async def create_api_key_payment(self, user_id, model_id, model_name, amount, lang='ru'):
-        """Создает платеж для API ключа"""
         description_ru = f"API ключ для модели {model_name} (750K токенов)"
         description_en = f"API key for model {model_name} (750K tokens)"
         description = description_ru if lang == 'ru' else description_en
@@ -136,5 +129,4 @@ class YooKassaService:
         
         return await self.create_payment(amount, description, return_url, metadata)
 
-# Глобальный экземпляр сервиса
 yookassa_service = YooKassaService()
