@@ -19,17 +19,14 @@ from services.routerai import routerai_service
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Инициализируем бота с базовыми настройками (без кастомных таймаутов)
-bot = Bot(
-    token=Config.BOT_TOKEN, 
-    default=DefaultBotProperties(parse_mode='HTML')
-)
+# Простая инициализация бота (без кастомных таймаутов)
+bot = Bot(token=Config.BOT_TOKEN, default=DefaultBotProperties(parse_mode='HTML'))
 dp = Dispatcher()
 
 active_generations = {}
 user_conversations = {}
 
-# ========== INLINE КЛАВИАТУРЫ ==========
+# ========== INLINE КЛАВИАТУРЫ (по центру, без синей кнопки) ==========
 def get_lang_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang_ru")],
@@ -120,7 +117,7 @@ def get_referral_keyboard(lang='ru'):
         ])
 
 def get_stop_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⏹️ Остановить генерацию", callback_data="stop_generation")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⏹️ Остановить", callback_data="stop_generation")]])
 
 def get_payment_check_keyboard(payment_id):
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -168,10 +165,7 @@ def get_plan_info_text(plan, lang='ru'):
 📈 Лимит сообщений: {plan['daily_limit']}/день
 🖼️ Генерация изображений: {plan['image_generate']}/день
 📤 Отправка изображений: {plan['image_send']}/день
-🎥 Отправка видео: {plan['video_send']}/день
-
-<b>Доступные модели:</b>
-{', '.join(available_models[:3])}{'...' if len(available_models) > 3 else ''}"""
+🎥 Отправка видео: {plan['video_send']}/день"""
     else:
         return f"""💎 <b>{plan['name_en']}</b>
 
@@ -179,10 +173,7 @@ def get_plan_info_text(plan, lang='ru'):
 📈 Message limit: {plan['daily_limit']}/day
 🖼️ Image generation: {plan['image_generate']}/day
 📤 Image sending: {plan['image_send']}/day
-🎥 Video sending: {plan['video_send']}/day
-
-<b>Available models:</b>
-{', '.join(available_models[:3])}{'...' if len(available_models) > 3 else ''}"""
+🎥 Video sending: {plan['video_send']}/day"""
 
 async def check_payment_status(payment_id, yookassa_id, user_id):
     try:
@@ -234,7 +225,7 @@ async def cmd_start(message: types.Message):
             await message.answer(welcome_text, reply_markup=get_lang_keyboard())
         else:
             lang = user['language']
-            welcome_text = "👋 <b>С возвращением!</b>\n\nИспользуйте команды или кнопки ниже:"
+            welcome_text = "👋 <b>С возвращением!</b>\n\nВыберите действие:"
             await message.answer(welcome_text, reply_markup=get_main_keyboard(lang))
     except Exception as e:
         logger.error(f"Start command error: {e}")
@@ -297,12 +288,6 @@ async def cmd_profile(message: types.Message):
 👥 Приглашено рефералов: {user['referral_count']}
 🎁 Бонусных дней: {user['referral_bonus_days']}
 
-📊 <b>Использовано сегодня:</b>
-Сообщения: {user['daily_used']}/{plan['daily_limit'] if plan else 100}
-Сгенерировано изображений: {user['images_generated_today']}/{plan['image_generate'] if plan else 0}
-Отправлено изображений: {user['images_sent_today']}/{plan['image_send'] if plan else 0}
-Отправлено видео: {user['videos_sent_today']}/{plan['video_send'] if plan else 0}
-
 🤖 Текущая модель: {user['current_model']}""",
         'en': f"""👤 <b>Your Profile</b>
 
@@ -311,12 +296,6 @@ async def cmd_profile(message: types.Message):
 🎁 Days until trial end: {trial_days_left}
 👥 Referrals invited: {user['referral_count']}
 🎁 Bonus days: {user['referral_bonus_days']}
-
-📊 <b>Used today:</b>
-Messages: {user['daily_used']}/{plan['daily_limit'] if plan else 100}
-Images generated: {user['images_generated_today']}/{plan['image_generate'] if plan else 0}
-Images sent: {user['images_sent_today']}/{plan['image_send'] if plan else 0}
-Videos sent: {user['videos_sent_today']}/{plan['video_send'] if plan else 0}
 
 🤖 Current model: {user['current_model']}"""
     }
@@ -357,10 +336,6 @@ async def cmd_referral(message: types.Message):
 👥 Приглашено пользователей: {user['referral_count']}
 🎁 Бонусных дней: {user['referral_bonus_days']}
 
-💎 <b>За каждого приглашенного:</b>
-• Вы получаете +{Config.REFERRAL_REWARD_DAYS} дней VIP
-• Приглашенный получает +{Config.REFERRAL_REWARD_DAYS} дней VIP
-
 🔗 <b>Ваша реферальная ссылка:</b>
 https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}""",
         'en': f"""📤 <b>Referral System</b>
@@ -368,62 +343,10 @@ https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}""",
 👥 Users invited: {user['referral_count']}
 🎁 Bonus days: {user['referral_bonus_days']}
 
-💎 <b>For each invited user:</b>
-• You get +{Config.REFERRAL_REWARD_DAYS} days VIP
-• Invited user gets +{Config.REFERRAL_REWARD_DAYS} days VIP
-
 🔗 <b>Your referral link:</b>
 https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}"""
     }
     await message.answer(ref_text[lang], reply_markup=get_referral_keyboard(lang))
-
-@dp.message(Command("generate"))
-async def cmd_generate(message: types.Message):
-    user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
-        
-    prompt = message.text.replace("/generate", "").strip()
-    if not prompt:
-        await message.answer("❌ Укажите описание для генерации изображения\nПример: /generate красная спортивная машина в горах")
-        return
-    
-    # Проверяем лимиты генерации изображений
-    can_generate, error_msg = db.can_generate_image(user['user_id'])
-    if not can_generate:
-        await message.answer(f"❌ {error_msg}")
-        return
-    
-    lang = user['language']
-    msg = await message.answer("🎨 <b>Генерация изображения...</b>\n\nЭто может занять несколько минут", reply_markup=get_stop_keyboard())
-    active_generations[message.from_user.id] = True
-    
-    try:
-        result = await routerai_service.generate_image(prompt)
-        
-        if result['success'] and active_generations.get(message.from_user.id):
-            # Обновляем счетчик генераций
-            db.update_media_usage(user['user_id'], 'image_generate')
-            
-            if result.get('image_data'):
-                # Отправляем сгенерированное изображение
-                image_data = base64.b64decode(result['image_data'])
-                await message.answer_photo(
-                    types.BufferedInputFile(image_data, filename="generated_image.jpg"),
-                    caption="🎨 <b>Сгенерированное изображение</b>"
-                )
-                await msg.delete()
-            else:
-                await msg.edit_text("✅ <b>Изображение сгенерировано!</b>")
-        elif not result['success']:
-            await msg.edit_text(f"❌ <b>Ошибка генерации:</b>\n\n{result['error']}")
-            
-    except Exception as e:
-        logger.error(f"Image generation error: {e}")
-        await msg.edit_text("❌ <b>Ошибка при генерации изображения</b>")
-    finally:
-        active_generations.pop(message.from_user.id, None)
 
 @dp.message(Command("help"))
 async def cmd_help(message: types.Message):
@@ -440,7 +363,6 @@ async def cmd_help(message: types.Message):
 /profile - мой профиль
 /buy - покупка подписок и API
 /referral - реферальная система
-/generate - генерация изображений
 /help - помощь
 
 <b>Поддержка:</b> {Config.SUPPORT_USERNAME}""",
@@ -453,18 +375,11 @@ async def cmd_help(message: types.Message):
 /profile - my profile
 /buy - buy subscriptions and API
 /referral - referral system
-/generate - generate images
 /help - help
 
 <b>Support:</b> {Config.SUPPORT_USERNAME}"""
     }
     await message.answer(help_text[lang])
-
-@dp.message(Command("stop"))
-async def cmd_stop(message: types.Message):
-    if message.from_user.id in active_generations:
-        active_generations[message.from_user.id] = False
-        await message.answer("⏹️ Генерация остановлена")
 
 # ========== CALLBACK ОБРАБОТЧИКИ ==========
 @dp.callback_query(F.data == "lang_ru")
@@ -487,7 +402,7 @@ Use commands for navigation."""
     }
     
     await callback.message.edit_text(welcome_text[lang])
-    await callback.message.answer("💡 <b>Используйте команды:</b>\n/menu - главное меню\n/help - помощь", reply_markup=get_main_keyboard(lang))
+    await callback.message.answer("👇 <b>Меню:</b>", reply_markup=get_main_keyboard(lang))
     await callback.answer()
 
 @dp.callback_query(F.data == "main_menu")
@@ -495,20 +410,20 @@ async def back_to_menu(callback: types.CallbackQuery):
     user = db.get_user(callback.from_user.id)
     lang = user['language'] if user else 'ru'
     await callback.message.edit_text("🏠 <b>Главное меню</b>")
-    await callback.message.answer("💡 <b>Используйте команды для навигации</b>", reply_markup=get_main_keyboard(lang))
+    await callback.message.answer("👇 <b>Выберите действие:</b>", reply_markup=get_main_keyboard(lang))
     await callback.answer()
 
 @dp.callback_query(F.data == "models")
 async def show_models(callback: types.CallbackQuery):
     user = db.get_user(callback.from_user.id)
     if not user: 
-        await callback.answer("Сначала используйте /start")
+        await callback.answer("Сначала /start")
         return
         
     lang = user['language']
     text = {
-        'ru': "🤖 <b>Выберите AI-модель</b>\n\nℹ️ - информация о модели\n✅ - выбрать модель",
-        'en': "🤖 <b>Choose AI model</b>\n\nℹ️ - model information\n✅ - select model"
+        'ru': "🤖 <b>Выберите AI-модель</b>\n\nℹ️ - информация\n✅ - выбрать",
+        'en': "🤖 <b>Choose AI model</b>\n\nℹ️ - info\n✅ - select"
     }
     await callback.message.edit_text(text[lang], reply_markup=get_models_keyboard(user['subscription'], lang))
     await callback.answer()
@@ -557,8 +472,8 @@ async def show_api_info(callback: types.CallbackQuery):
         lang = user['language'] if user else 'ru'
         price = Config.API_KEY_PRICES.get(model_id, 0)
         api_text = {
-            'ru': f"{get_model_info_text(model, lang)}\n\n💰 <b>Цена API-ключа:</b> {price} руб (750K токенов)",
-            'en': f"{get_model_info_text(model, lang)}\n\n💰 <b>API Key Price:</b> {price} RUB (750K tokens)"
+            'ru': f"{get_model_info_text(model, lang)}\n\n💰 <b>Цена:</b> {price} руб",
+            'en': f"{get_model_info_text(model, lang)}\n\n💰 <b>Price:</b> {price} RUB"
         }
         await callback.message.answer(api_text[lang])
     await callback.answer()
@@ -567,7 +482,7 @@ async def show_api_info(callback: types.CallbackQuery):
 async def select_model(callback: types.CallbackQuery):
     user = db.get_user(callback.from_user.id)
     if not user: 
-        await callback.answer("Сначала используйте /start")
+        await callback.answer("Сначала /start")
         return
         
     model_id = callback.data.replace("model_", "")
@@ -582,8 +497,8 @@ async def select_model(callback: types.CallbackQuery):
     
     lang = user['language']
     success_text = {
-        'ru': f"✅ <b>Модель {model_name} выбрана!</b>\n\nТеперь отправляйте сообщения для генерации.",
-        'en': f"✅ <b>Model {model_name} selected!</b>\n\nNow send messages for generation."
+        'ru': f"✅ <b>Модель {model_name} выбрана!</b>",
+        'en': f"✅ <b>Model {model_name} selected!</b>"
     }
     await callback.message.answer(success_text[lang])
     await callback.answer()
@@ -592,7 +507,7 @@ async def select_model(callback: types.CallbackQuery):
 async def process_subscription(callback: types.CallbackQuery):
     user = db.get_user(callback.from_user.id)
     if not user: 
-        await callback.answer("Сначала используйте /start")
+        await callback.answer("Сначала /start")
         return
         
     plan_id = callback.data.replace("sub_", "")
@@ -608,36 +523,24 @@ async def process_subscription(callback: types.CallbackQuery):
     if result['success']:
         db.update_payment_status(payment_id, 'pending', result['yookassa_id'])
         payment_text = {
-            'ru': f"""💳 <b>Оплата подписки {plan['name']}</b>
+            'ru': f"""💳 <b>Оплата {plan['name']}</b>
 
 💰 Сумма: {plan['price']} руб
-📅 Срок: 30 дней
-📊 Лимит: {plan['daily_limit']} сообщений/день
-🖼️ Генерация изображений: {plan['image_generate']}/день
-📤 Отправка изображений: {plan['image_send']}/день
-🎥 Отправка видео: {plan['video_send']}/день
+👉 <a href="{result['confirmation_url']}">Оплатить</a>
 
-👉 <a href="{result['confirmation_url']}">Перейти к оплате</a>
-
-⚠️ После оплаты нажмите "✅ Я оплатил" для проверки статуса.""",
-            'en': f"""💳 <b>Payment for {plan['name_en']}</b>
+⚠️ После оплаты нажмите "✅ Я оплатил".""",
+            'en': f"""💳 <b>Payment {plan['name_en']}</b>
 
 💰 Amount: {plan['price']} RUB
-📅 Duration: 30 days
-📊 Limit: {plan['daily_limit']} messages/day
-🖼️ Image generation: {plan['image_generate']}/day
-📤 Image sending: {plan['image_send']}/day
-🎥 Video sending: {plan['video_send']}/day
+👉 <a href="{result['confirmation_url']}">Pay</a>
 
-👉 <a href="{result['confirmation_url']}">Proceed to payment</a>
-
-⚠️ After payment, click "✅ I paid" to check status."""
+⚠️ After payment, click "✅ I paid"."""
         }
         await callback.message.answer(payment_text[user['language']], reply_markup=get_payment_check_keyboard(payment_id))
     else:
         error_text = {
-            'ru': "❌ <b>Ошибка при создании платежа</b>\n\nПопробуйте позже.",
-            'en': "❌ <b>Payment creation error</b>\n\nTry again later."
+            'ru': "❌ <b>Ошибка оплаты</b>",
+            'en': "❌ <b>Payment error</b>"
         }
         await callback.message.answer(error_text[user['language']])
     await callback.answer()
@@ -646,7 +549,7 @@ async def process_subscription(callback: types.CallbackQuery):
 async def process_api(callback: types.CallbackQuery):
     user = db.get_user(callback.from_user.id)
     if not user: 
-        await callback.answer("Сначала используйте /start")
+        await callback.answer("Сначала /start")
         return
         
     model_id = callback.data.replace("api_", "")
@@ -671,30 +574,24 @@ async def process_api(callback: types.CallbackQuery):
     if result['success']:
         db.update_payment_status(payment_id, 'pending', result['yookassa_id'])
         payment_text = {
-            'ru': f"""🔑 <b>Покупка API-ключа {model_name}</b>
+            'ru': f"""🔑 <b>Покупка API {model_name}</b>
 
-💰 Стоимость: {price} руб (за 750K токенов)
+💰 Сумма: {price} руб
+👉 <a href="{result['confirmation_url']}">Оплатить</a>
 
-👉 <a href="{result['confirmation_url']}">Перейти к оплате</a>
+⚠️ После оплаты нажмите "✅ Я оплатил".""",
+            'en': f"""🔑 <b>API Purchase {model_name}</b>
 
-⚠️ После оплаты нажмите "✅ Я оплатил"
+💰 Amount: {price} RUB
+👉 <a href="{result['confirmation_url']}">Pay</a>
 
-📩 После подтверждения обратитесь к {Config.SUPPORT_USERNAME} для получения ключа.""",
-            'en': f"""🔑 <b>API Key Purchase {model_name}</b>
-
-💰 Price: {price} RUB (per 750K tokens)
-
-👉 <a href="{result['confirmation_url']}">Proceed to payment</a>
-
-⚠️ After payment, click "✅ I paid"
-
-📩 After confirmation, contact {Config.SUPPORT_USERNAME} for your key."""
+⚠️ After payment, click "✅ I paid"."""
         }
         await callback.message.answer(payment_text[user['language']], reply_markup=get_payment_check_keyboard(payment_id))
     else:
         error_text = {
-            'ru': "❌ <b>Ошибка при создании платежа</b>\n\nПопробуйте позже.",
-            'en': "❌ <b>Payment creation error</b>\n\nTry again later."
+            'ru': "❌ <b>Ошибка оплаты</b>",
+            'en': "❌ <b>Payment error</b>"
         }
         await callback.message.answer(error_text[user['language']])
     await callback.answer()
@@ -710,13 +607,13 @@ async def check_payment(callback: types.CallbackQuery):
     user = db.get_user(callback.from_user.id)
     lang = user['language'] if user else 'ru'
     
-    await callback.message.edit_text("⏳ <b>Проверяем статус платежа...</b>")
+    await callback.message.edit_text("⏳ <b>Проверка платежа...</b>")
     
     result = await check_payment_status(payment_id, payment['yookassa_payment_id'], payment['user_id'])
     if not result:
         not_paid_text = {
-            'ru': "❌ <b>Платеж еще не подтвержден</b>\n\nПожалуйста, подождите несколько минут и попробуйте снова.",
-            'en': "❌ <b>Payment not confirmed yet</b>\n\nPlease wait a few minutes and try again."
+            'ru': "❌ <b>Платеж не подтвержден</b>\n\nПопробуйте позже.",
+            'en': "❌ <b>Payment not confirmed</b>\n\nTry again later."
         }
         await callback.message.answer(not_paid_text[lang], reply_markup=get_payment_check_keyboard(payment_id))
     await callback.answer()
@@ -725,13 +622,13 @@ async def check_payment(callback: types.CallbackQuery):
 async def show_buy_subscription(callback: types.CallbackQuery):
     user = db.get_user(callback.from_user.id)
     if not user: 
-        await callback.answer("Сначала используйте /start")
+        await callback.answer("Сначала /start")
         return
         
     lang = user['language']
     text = {
-        'ru': "💎 <b>Выберите подписку</b>\n\nℹ️ - информация о плане\n💳 - купить подписку",
-        'en': "💎 <b>Choose subscription</b>\n\nℹ️ - plan information\n💳 - buy subscription"
+        'ru': "💎 <b>Выберите подписку</b>",
+        'en': "💎 <b>Choose subscription</b>"
     }
     await callback.message.edit_text(text[lang], reply_markup=get_subscription_keyboard(lang))
     await callback.answer()
@@ -740,13 +637,13 @@ async def show_buy_subscription(callback: types.CallbackQuery):
 async def show_buy_api(callback: types.CallbackQuery):
     user = db.get_user(callback.from_user.id)
     if not user: 
-        await callback.answer("Сначала используйте /start")
+        await callback.answer("Сначала /start")
         return
         
     lang = user['language']
     text = {
-        'ru': "🔑 <b>Купить API-ключ</b>\n\nℹ️ - информация о модели\n🔑 - купить API-ключ",
-        'en': "🔑 <b>Buy API Key</b>\n\nℹ️ - model information\n🔑 - buy API key"
+        'ru': "🔑 <b>Купить API-ключ</b>",
+        'en': "🔑 <b>Buy API Key</b>"
     }
     await callback.message.edit_text(text[lang], reply_markup=get_api_key_keyboard(lang))
     await callback.answer()
@@ -755,32 +652,24 @@ async def show_buy_api(callback: types.CallbackQuery):
 async def show_referral(callback: types.CallbackQuery):
     user = db.get_user(callback.from_user.id)
     if not user: 
-        await callback.answer("Сначала используйте /start")
+        await callback.answer("Сначала /start")
         return
         
     lang = user['language']
     ref_text = {
         'ru': f"""📤 <b>Реферальная система</b>
 
-👥 Приглашено пользователей: {user['referral_count']}
+👥 Приглашено: {user['referral_count']}
 🎁 Бонусных дней: {user['referral_bonus_days']}
 
-💎 <b>За каждого приглашенного:</b>
-• Вы получаете +{Config.REFERRAL_REWARD_DAYS} дней VIP
-• Приглашенный получает +{Config.REFERRAL_REWARD_DAYS} дней VIP
-
-🔗 <b>Ваша реферальная ссылка:</b>
+🔗 <b>Ваша ссылка:</b>
 https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}""",
         'en': f"""📤 <b>Referral System</b>
 
-👥 Users invited: {user['referral_count']}
+👥 Invited: {user['referral_count']}
 🎁 Bonus days: {user['referral_bonus_days']}
 
-💎 <b>For each invited user:</b>
-• You get +{Config.REFERRAL_REWARD_DAYS} days VIP
-• Invited user gets +{Config.REFERRAL_REWARD_DAYS} days VIP
-
-🔗 <b>Your referral link:</b>
+🔗 <b>Your link:</b>
 https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}"""
     }
     await callback.message.edit_text(ref_text[lang], reply_markup=get_referral_keyboard(lang))
@@ -792,47 +681,43 @@ async def show_help(callback: types.CallbackQuery):
     lang = user['language'] if user else 'ru'
     
     help_text = {
-        'ru': f"""🆘 <b>Помощь по GobiAI</b>
+        'ru': f"""🆘 <b>Помощь</b>
 
-<b>Команды:</b>
-/start - начать работу
-/menu - главное меню  
-/models - выбрать модель
-/profile - мой профиль
-/buy - покупка подписок и API
-/referral - реферальная система
-/generate - генерация изображений
+/start - начать
+/menu - меню
+/models - модели
+/profile - профиль
+/buy - купить
+/referral - рефералка
 /help - помощь
 
-<b>Поддержка:</b> {Config.SUPPORT_USERNAME}""",
-        'en': f"""🆘 <b>GobiAI Help</b>
+Поддержка: {Config.SUPPORT_USERNAME}""",
+        'en': f"""🆘 <b>Help</b>
 
-<b>Commands:</b>
-/start - start working
-/menu - main menu
-/models - choose model
-/profile - my profile
-/buy - buy subscriptions and API
-/referral - referral system
-/generate - generate images
+/start - start
+/menu - menu
+/models - models
+/profile - profile
+/buy - buy
+/referral - referral
 /help - help
 
-<b>Support:</b> {Config.SUPPORT_USERNAME}"""
+Support: {Config.SUPPORT_USERNAME}"""
     }
     await callback.message.edit_text(help_text[lang])
     await callback.answer()
 
 @dp.callback_query(F.data == "generate_image")
-async def show_generate_image(callback: types.CallbackQuery):
+async def show_generate_info(callback: types.CallbackQuery):
     user = db.get_user(callback.from_user.id)
     if not user: 
-        await callback.answer("Сначала используйте /start")
+        await callback.answer("Сначала /start")
         return
         
     lang = user['language']
     text = {
-        'ru': "🎨 <b>Генерация изображений</b>\n\nИспользуйте команду /generate с описанием:\n\n<code>/generate красная спортивная машина в горах</code>",
-        'en': "🎨 <b>Image Generation</b>\n\nUse /generate command with description:\n\n<code>/generate red sports car in mountains</code>"
+        'ru': "🎨 <b>Генерация изображений</b>\n\nИспользуйте команду /generate с описанием",
+        'en': "🎨 <b>Image Generation</b>\n\nUse /generate command with description"
     }
     await callback.message.edit_text(text[lang])
     await callback.answer()
@@ -841,226 +726,24 @@ async def show_generate_image(callback: types.CallbackQuery):
 async def share_referral(callback: types.CallbackQuery):
     user = db.get_user(callback.from_user.id)
     if not user: 
-        await callback.answer("Сначала используйте /start")
+        await callback.answer("Сначала /start")
         return
         
     ref_text = {
-        'ru': f"""📤 <b>Поделиться реферальной ссылкой</b>
+        'ru': f"""📤 <b>Реферальная ссылка</b>
 
-🔗 Ваша ссылка:
-https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}""",
+        'en': f"""📤 <b>Referral link</b>
 
-💎 Приглашайте друзей и получайте бонусы!""",
-        'en': f"""📤 <b>Share referral link</b>
-
-🔗 Your link:
-https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}
-
-💎 Invite friends and get bonuses!"""
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}"""
     }
     await callback.message.answer(ref_text[user['language']])
     await callback.answer()
 
-@dp.callback_query(F.data == "stop_generation")
-async def stop_generation(callback: types.CallbackQuery):
-    if callback.from_user.id in active_generations:
-        active_generations[callback.from_user.id] = False
-        user = db.get_user(callback.from_user.id)
-        lang = user['language'] if user else 'ru'
-        stop_text = {
-            'ru': "⏹️ <b>Генерация остановлена</b>",
-            'en': "⏹️ <b>Generation stopped</b>"
-        }
-        await callback.message.answer(stop_text[lang])
-    await callback.answer()
-
-# ========== ОБРАБОТКА СООБЩЕНИЙ ДЛЯ AI ==========
-@dp.message(F.photo)
-async def handle_photo(message: types.Message):
-    user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
-        
-    # Проверяем лимиты отправки изображений
-    can_send, error_msg = db.can_send_image(user['user_id'])
-    if not can_send: 
-        await message.answer(f"❌ {error_msg}")
-        return
-        
-    # Проверяем общие лимиты
-    can_use, error_msg = db.can_use_model(user['user_id'])
-    if not can_use: 
-        await message.answer(f"❌ {error_msg}")
-        return
-        
-    db.increment_daily_usage(user['user_id'])
-    db.update_media_usage(user['user_id'], 'image_send')
-    
-    # Проверяем поддерживает ли текущая модель изображения
-    current_model_supports_images = False
-    for category_models in Config.AI_MODELS.values():
-        for model in category_models:
-            if model['id'] == user['current_model']:
-                current_model_supports_images = model['supports_images']
-                break
-    
-    if not current_model_supports_images:
-        lang = user['language']
-        error_text = {
-            'ru': "❌ Текущая модель не поддерживает изображения",
-            'en': "❌ Current model doesn't support images"
-        }
-        await message.answer(error_text[lang])
-        return
-    
-    # Скачиваем изображение
-    file = await bot.get_file(message.photo[-1].file_id)
-    file_path = await bot.download_file(file.file_path)
-    image_data = base64.b64encode(file_path.read()).decode('utf-8')
-    
-    lang = user['language']
-    msg = await message.answer("⏳ <b>Обработка изображения...</b>", reply_markup=get_stop_keyboard())
-    active_generations[message.from_user.id] = True
-    
-    try:
-        result = await routerai_service.send_message(
-            user['current_model'], 
-            message.caption or "Опиши это изображение",
-            extra_data={"image": image_data}
-        )
-        
-        if result['success'] and active_generations.get(message.from_user.id):
-            response_text = f"🤖 <b>Ответ:</b>\n\n{result['response']}"
-            await msg.edit_text(response_text)
-        elif not result['success']:
-            error_text = f"❌ <b>Ошибка:</b>\n\n{result['error']}"
-            await msg.edit_text(error_text)
-            
-    except Exception as e:
-        error_text = {
-            'ru': "❌ <b>Ошибка обработки изображения</b>",
-            'en': "❌ <b>Image processing error</b>"
-        }
-        await msg.edit_text(error_text[lang])
-    finally:
-        active_generations.pop(message.from_user.id, None)
-
-@dp.message(F.text)
-async def handle_message(message: types.Message):
-    # Пропускаем команды
-    if message.text.startswith('/'):
-        return
-        
-    user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
-        
-    # Проверяем общие лимиты
-    can_use, error_msg = db.can_use_model(user['user_id'])
-    if not can_use: 
-        await message.answer(f"❌ {error_msg}")
-        return
-        
-    db.increment_daily_usage(user['user_id'])
-    
-    user_id = message.from_user.id
-    if user_id not in user_conversations:
-        user_conversations[user_id] = []
-    
-    user_conversations[user_id].append({"role": "user", "content": message.text})
-    if len(user_conversations[user_id]) > 10:
-        user_conversations[user_id] = user_conversations[user_id][-10:]
-    
-    lang = user['language']
-    msg = await message.answer("⏳ <b>Генерация началась...</b>", reply_markup=get_stop_keyboard())
-    active_generations[user_id] = True
-    
-    try:
-        result = await routerai_service.send_message(
-            user['current_model'], 
-            message.text,
-            user_conversations[user_id][:-1]
-        )
-        
-        if result['success'] and active_generations.get(user_id):
-            user_conversations[user_id].append({"role": "assistant", "content": result['response']})
-            response_text = f"🤖 <b>Ответ:</b>\n\n{result['response']}"
-            await msg.edit_text(response_text)
-        elif not result['success']:
-            error_text = f"❌ <b>Ошибка:</b>\n\n{result['error']}"
-            await msg.edit_text(error_text)
-            
-    except Exception as e:
-        error_text = {
-            'ru': "❌ <b>Ошибка соединения</b>\n\nПопробуйте позже.",
-            'en': "❌ <b>Connection error</b>\n\nPlease try again later."
-        }
-        await msg.edit_text(error_text[lang])
-    finally:
-        active_generations.pop(user_id, None)
-
-# ========== ВЕБХУК YOOKASSA ==========
-async def yookassa_webhook(request):
-    try:
-        body = await request.text()
-        data = json.loads(body)
-        logger.info(f"YooKassa webhook received")
-        
-        if data.get('event') == 'payment.succeeded':
-            yookassa_id = data['object']['id']
-            metadata = data['object'].get('metadata', {})
-            user_id = metadata.get('user_id')
-            
-            if user_id:
-                payment = db.get_payment_by_yookassa_id(yookassa_id)
-                if payment and payment['status'] != 'succeeded':
-                    db.update_payment_status(payment['payment_id'], 'succeeded', yookassa_id)
-                    
-                    user = db.get_user(user_id)
-                    lang = user['language'] if user else 'ru'
-                    
-                    if payment['type'] == 'subscription':
-                        db.update_user_subscription(user_id, payment['plan_id'])
-                        success_text = {
-                            'ru': "✅ <b>Платеж автоматически подтвержден!</b>\n\n🎉 Ваша подписка активирована на 30 дней!",
-                            'en': "✅ <b>Payment automatically confirmed!</b>\n\n🎉 Your subscription activated for 30 days!"
-                        }
-                    else:
-                        success_text = {
-                            'ru': f"✅ <b>Платеж автоматически подтвержден!</b>\n\n📩 Обратитесь к {Config.SUPPORT_USERNAME} для получения ключа",
-                            'en': f"✅ <b>Payment automatically confirmed!</b>\n\n📩 Contact {Config.SUPPORT_USERNAME} for your key"
-                        }
-                    
-                    await bot.send_message(user_id, success_text[lang])
-        
-        return web.Response(status=200, text='OK')
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return web.Response(status=500, text='Error')
-
-async def start_webhook_server():
-    app = web.Application()
-    app.router.add_post('/yookassa-webhook', yookassa_webhook)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', Config.PORT)
-    await site.start()
-    logger.info(f"Webhook server started on port {Config.PORT}")
-    return runner
-
+# ========== ЗАПУСК ==========
 async def main():
     logger.info("Starting GobiAI bot...")
-    
-    # Запускаем сервер для вебхуков
-    runner = await start_webhook_server()
-    
-    logger.info("Starting bot in polling mode...")
-    try:
-        await dp.start_polling(bot, skip_updates=True)
-    finally:
-        await runner.cleanup()
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
