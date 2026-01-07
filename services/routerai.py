@@ -1,5 +1,6 @@
 import aiohttp
-import json
+import asyncio
+import base64
 from config import Config
 
 class RouterAIService:
@@ -11,7 +12,7 @@ class RouterAIService:
             "Content-Type": "application/json"
         }
     
-    async def send_message(self, model_id, message, conversation_history=None):
+    async def send_message(self, model_id, message, conversation_history=None, extra_data=None):
         """Отправляет сообщение в RouterAI API"""
         payload = {
             "model": model_id,
@@ -27,6 +28,21 @@ class RouterAIService:
         # Добавляем историю сообщений если есть
         if conversation_history:
             payload["messages"] = conversation_history + payload["messages"]
+        
+        # Добавляем изображение если есть
+        if extra_data and "image" in extra_data:
+            payload["messages"][0]["content"] = [
+                {
+                    "type": "text",
+                    "text": message
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{extra_data['image']}"
+                    }
+                }
+            ]
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -91,5 +107,4 @@ class RouterAIService:
         except:
             return False
 
-# Глобальный экземпляр сервиса
 routerai_service = RouterAIService()
