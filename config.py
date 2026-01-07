@@ -26,7 +26,7 @@ class Config:
     # Image Generation Model
     IMAGE_GENERATION_MODEL = "openai/gpt-5-image-mini"
 
-    # AI Models with updated Gemma 3 4B (мультимодальная)
+    # AI Models - Gemma 3 4B бесплатная для всех
     AI_MODELS = {
         "free": [
             {"id": "google/gemma-3-4b-it", "name": "🧠 Gemma 3 4B", "name_en": "🧠 Gemma 3 4B", 
@@ -100,7 +100,7 @@ class Config:
         "openai/o1-pro": 99999,
     }
 
-    # Subscription plans with media limits (ОБНОВЛЕННЫЕ ЛИМИТЫ)
+    # Subscription plans with media limits
     SUBSCRIPTION_PLANS = [
         {"id": "free", "name": "🆓 Бесплатно", "name_en": "🆓 Free", "price": 0, 
          "daily_limit": 100, "image_send": 2, "image_generate": 0, "video_send": 0},
