@@ -49,15 +49,6 @@ class Database:
             )
         ''')
         
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS generated_images (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                image_data TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
         self.conn.commit()
     
     def get_user(self, user_id):
@@ -94,6 +85,8 @@ class Database:
         ref_code = f"ref_{user_id}"
         
         referred_by = None
+        referral_bonus = 0
+        
         if referral_code and referral_code.startswith('ref_'):
             try:
                 referred_by = int(referral_code.replace('ref_', ''))
@@ -106,24 +99,64 @@ class Database:
                 ''', (Config.REFERRAL_REWARD_DAYS, referred_by))
                 
                 # Даем бонус новому пользователю
+                referral_bonus = Config.REFERRAL_REWARD_DAYS
                 trial_end = (datetime.now() + timedelta(days=30 * Config.TRIAL_MONTHS + Config.REFERRAL_REWARD_DAYS)).strftime('%Y-%m-%d')
             except:
                 referred_by = None
         
         cursor.execute('''
             INSERT OR REPLACE INTO users 
-            (user_id, username, language, trial_end, referral_code, referred_by) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (user_id, username, language, trial_end, ref_code, referred_by))
+            (user_id, username, language, trial_end, referral_code, referred_by, referral_bonus_days) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, username, language, trial_end, ref_code, referred_by, referral_bonus))
         
         self.conn.commit()
         return self.get_user(user_id)
+    
+    def update_user_subscription(self, user_id, subscription, duration_days=30):
+        cursor = self.conn.cursor()
+        subscription_end = (datetime.now() + timedelta(days=duration_days)).strftime('%Y-%m-%d')
+        
+        cursor.execute('''
+            UPDATE users 
+            SET subscription = ?, subscription_end = ?
+            WHERE user_id = ?
+        ''', (subscription, subscription_end, user_id))
+        
+        self.conn.commit()
+    
+    def update_user_model(self, user_id, model_id):
+        cursor = self.conn.cursor()
+        cursor.execute('UPDATE users SET current_model = ? WHERE user_id = ?', (model_id, user_id))
+        self.conn.commit()
+    
+    def increment_daily_usage(self, user_id):
+        cursor = self.conn.cursor()
+        
+        cursor.execute('SELECT last_reset FROM users WHERE user_id = ?', (user_id,))
+        result = cursor.fetchone()
+        last_reset = result[0] if result else None
+        
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        if last_reset != today:
+            cursor.execute('''
+                UPDATE users 
+                SET daily_used = 0, 
+                    images_generated_today = 0,
+                    images_sent_today = 0,
+                    videos_sent_today = 0,
+                    last_reset = ? 
+                WHERE user_id = ?
+            ''', (today, user_id))
+        
+        cursor.execute('UPDATE users SET daily_used = daily_used + 1 WHERE user_id = ?', (user_id,))
+        self.conn.commit()
     
     def update_media_usage(self, user_id, media_type):
         """Обновляет счетчики медиафайлов"""
         cursor = self.conn.cursor()
         
-        # Сбрасываем счетчики если новый день
         cursor.execute('SELECT last_reset FROM users WHERE user_id = ?', (user_id,))
         result = cursor.fetchone()
         last_reset = result[0] if result else None
@@ -150,6 +183,24 @@ class Database:
         
         self.conn.commit()
     
+    def can_use_model(self, user_id):
+        user = self.get_user(user_id)
+        if not user:
+            return False, "User not found"
+        
+        today = datetime.now().strftime('%Y-%m-%d')
+        if user['last_reset'] != today:
+            return True, ""
+        
+        plan = next((p for p in Config.SUBSCRIPTION_PLANS if p['id'] == user['subscription']), None)
+        if not plan:
+            return False, "Subscription plan not found"
+        
+        if user['daily_used'] >= plan['daily_limit']:
+            return False, f"Daily limit ({plan['daily_limit']} messages) exceeded"
+        
+        return True, ""
+    
     def can_generate_image(self, user_id):
         """Проверяет можно ли генерировать изображения"""
         user = self.get_user(user_id)
@@ -161,7 +212,7 @@ class Database:
             return False, "Plan not found"
         
         if user['images_generated_today'] >= plan['image_generate']:
-            return False, f"Достигнут лимит генерации изображений ({plan['image_generate']}/день)"
+            return False, f"Image generation limit reached ({plan['image_generate']}/day)"
         
         return True, ""
     
@@ -176,7 +227,7 @@ class Database:
             return False, "Plan not found"
         
         if user['images_sent_today'] >= plan['image_send']:
-            return False, f"Достигнут лимит отправки изображений ({plan['image_send']}/день)"
+            return False, f"Image send limit reached ({plan['image_send']}/day)"
         
         return True, ""
     
@@ -191,9 +242,73 @@ class Database:
             return False, "Plan not found"
         
         if user['videos_sent_today'] >= plan['video_send']:
-            return False, f"Достигнут лимит отправки видео ({plan['video_send']}/день)"
+            return False, f"Video send limit reached ({plan['video_send']}/day)"
         
         return True, ""
+    
+    def create_payment(self, payment_id, user_id, payment_type, plan_id=None, model_id=None, amount=0):
+        cursor = self.conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO payments 
+            (payment_id, user_id, type, plan_id, model_id, amount, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending')
+        ''', (payment_id, user_id, payment_type, plan_id, model_id, amount))
+        
+        self.conn.commit()
+    
+    def update_payment_status(self, payment_id, status, yookassa_id=None):
+        cursor = self.conn.cursor()
+        
+        if yookassa_id:
+            cursor.execute('''
+                UPDATE payments 
+                SET status = ?, yookassa_payment_id = ?
+                WHERE payment_id = ?
+            ''', (status, yookassa_id, payment_id))
+        else:
+            cursor.execute('''
+                UPDATE payments 
+                SET status = ?
+                WHERE payment_id = ?
+            ''', (status, payment_id))
+        
+        self.conn.commit()
+    
+    def get_payment(self, payment_id):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM payments WHERE payment_id = ?', (payment_id,))
+        payment = cursor.fetchone()
+        
+        if payment:
+            return {
+                'payment_id': payment[0],
+                'user_id': payment[1],
+                'type': payment[2],
+                'plan_id': payment[3],
+                'model_id': payment[4],
+                'amount': payment[5],
+                'status': payment[6],
+                'yookassa_payment_id': payment[7]
+            }
+        return None
+    
+    def get_payment_by_yookassa_id(self, yookassa_id):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM payments WHERE yookassa_payment_id = ?', (yookassa_id,))
+        payment = cursor.fetchone()
+        
+        if payment:
+            return {
+                'payment_id': payment[0],
+                'user_id': payment[1],
+                'type': payment[2],
+                'plan_id': payment[3],
+                'model_id': payment[4],
+                'amount': payment[5],
+                'status': payment[6],
+                'yookassa_payment_id': payment[7]
+            }
+        return None
 
-    # Остальные методы остаются без изменений...
-    # [Продолжение методов как в предыдущей версии...]
+db = Database()
