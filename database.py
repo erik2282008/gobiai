@@ -30,6 +30,7 @@ class Database:
                 referral_code TEXT UNIQUE,
                 referred_by INTEGER,
                 referral_count INTEGER DEFAULT 0,
+                referral_bonus_days INTEGER DEFAULT 0,
                 monthly_tokens_used INTEGER DEFAULT 0,
                 monthly_input_tokens INTEGER DEFAULT 0,
                 monthly_output_tokens INTEGER DEFAULT 0,
@@ -81,11 +82,12 @@ class Database:
                 'referral_code': user[12],
                 'referred_by': user[13],
                 'referral_count': user[14],
-                'monthly_tokens_used': user[15],
-                'monthly_input_tokens': user[16],
-                'monthly_output_tokens': user[17],
-                'last_cost_reset': user[18],
-                'is_blocked': user[19]
+                'referral_bonus_days': user[15],
+                'monthly_tokens_used': user[16],
+                'monthly_input_tokens': user[17],
+                'monthly_output_tokens': user[18],
+                'last_cost_reset': user[19],
+                'is_blocked': user[20]
             }
         return None
     
@@ -290,28 +292,15 @@ class Database:
             self.conn.commit()
             user = self.get_user(user_id)
         
-        # Лимиты для разных подписок (60% на ответы, 40% на вопросы)
-        if user['subscription'] == 'free':
-            max_total = 15000
-            max_input = int(max_total * 0.4)  # 6K
-            max_output = int(max_total * 0.6)  # 9K
-        else:
-            max_total = 850000
-            max_input = int(max_total * 0.4)  # 340K
-            max_output = int(max_total * 0.6)  # 510K
+        # Лимиты для разных подписок
+        max_tokens = Config.MAX_MONTHLY_TOKENS.get(user['subscription'], 15000)
         
         # Проверка лимитов
-        if user['monthly_tokens_used'] + input_tokens + output_tokens > max_total:
+        if user['monthly_tokens_used'] + input_tokens + output_tokens > max_tokens:
             cursor = self.conn.cursor()
             cursor.execute('UPDATE users SET is_blocked = TRUE WHERE user_id = ?', (user_id,))
             self.conn.commit()
-            return False, f"Monthly token limit reached ({max_total} tokens)"
-        
-        if user['monthly_input_tokens'] + input_tokens > max_input:
-            return False, f"Monthly input token limit reached ({max_input} tokens)"
-        
-        if user['monthly_output_tokens'] + output_tokens > max_output:
-            return False, f"Monthly output token limit reached ({max_output} tokens)"
+            return False, f"Monthly token limit reached ({max_tokens} tokens)"
         
         return True, ""
     
