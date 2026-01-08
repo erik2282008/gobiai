@@ -18,6 +18,7 @@ from aiogram.types import (
 )
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 from config import Config
 from database import db
@@ -1165,33 +1166,36 @@ async def yookassa_webhook(request):
         logger.error(f"Webhook error: {e}")
         return web.Response(status=500, text='Error')
 
-async def start_webhook_server():
-    app = web.Application()
-    app.router.add_post('/yookassa-webhook', yookassa_webhook)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', Config.PORT)
-    await site.start()
-    logger.info(f"Webhook server started on port {Config.PORT}")
-    return runner
+async def on_startup(bot: Bot):
+    await bot.delete_webhook()
+    await bot.set_webhook(f"https://{Config.WEBHOOK_DOMAIN}/webhook")
 
 async def main():
-    logger.info("Starting GobiAI bot with all features...")
+    logger.info("Starting GobiAI bot with webhook...")
     
     try:
-        # Проверяем подключение
         await bot.get_me()
         logger.info("Bot connected successfully")
     except Exception as e:
         logger.error(f"Bot connection failed: {e}")
         return
     
-    # Запускаем сервер для вебхуков
-    runner = await start_webhook_server()
+    app = web.Application()
+    app.router.add_post("/yookassa-webhook", yookassa_webhook)
+    app.router.add_post("/webhook", SimpleRequestHandler(dp, bot).handle)
     
-    logger.info("Starting bot in polling mode...")
+    dp.startup.register(on_startup)
+    setup_application(app, dp, bot=bot)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', Config.PORT)
+    await site.start()
+    
+    logger.info(f"Webhook server started on port {Config.PORT}")
+    
     try:
-        await dp.start_polling(bot, skip_updates=True)
+        await asyncio.Event().wait()  # Run forever
     finally:
         await runner.cleanup()
 
