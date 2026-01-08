@@ -103,28 +103,28 @@ class Config:
     # Subscription plans with media limits
     SUBSCRIPTION_PLANS = [
         {"id": "free", "name": "🆓 Бесплатно", "name_en": "🆓 Free", "price": 0, 
-         "daily_limit": 100, "image_send": 2, "image_generate": 1, "video_send": 1},
+         "daily_limit": 100, "image_send": 15, "image_generate": 1, "video_send": 1},
         
         {"id": "lite", "name": "💎 Lite", "name_en": "💎 Lite", "price": 15, 
-         "daily_limit": 200, "image_send": 5, "image_generate": 3, "video_send": 2},
+         "daily_limit": 200, "image_send": 20, "image_generate": 3, "video_send": 2},
 
         {"id": "lite_plus", "name": "💎 Lite+", "name_en": "💎 Lite+", "price": 399, 
-         "daily_limit": 350, "image_send": 20, "image_generate": 5, "video_send": 4},
+         "daily_limit": 350, "image_send": 35, "image_generate": 5, "video_send": 4},
          
         {"id": "vip", "name": "⭐ VIP", "name_en": "⭐ VIP", "price": 1499, 
-         "daily_limit": 500, "image_send": 35, "image_generate": 7, "video_send": 7},
+         "daily_limit": 500, "image_send": 45, "image_generate": 7, "video_send": 7},
          
         {"id": "vip_plus", "name": "🎨 VIP+", "name_en": "🎨 VIP+", "price": 4999, 
-         "daily_limit": 1000, "image_send": 40, "image_generate": 10, "video_send": 10},
+         "daily_limit": 1000, "image_send": 57, "image_generate": 10, "video_send": 10},
          
         {"id": "quantum", "name": "🚀 Quantum", "name_en": "🚀 Quantum", "price": 19999, 
-         "daily_limit": 2000, "image_send": 60, "image_generate": 30, "video_send": 15},
+         "daily_limit": 2000, "image_send": 85, "image_generate": 30, "video_send": 15},
          
         {"id": "quantum_pro", "name": "🔬 Quantum Pro", "name_en": "🔬 Quantum Pro", "price": 49999, 
-         "daily_limit": 5000, "image_send": 110, "image_generate": 60, "video_send": 22},
+         "daily_limit": 5000, "image_send": 210, "image_generate": 60, "video_send": 22},
          
         {"id": "quantum_infinite", "name": "🌌 Quantum Infinite", "name_en": "🌌 Quantum Infinite", "price": 149999, 
-         "daily_limit": 9000, "image_send": 250, "image_generate": 85, "video_send": 50},
+         "daily_limit": 9000, "image_send": 350, "image_generate": 85, "video_send": 50},
     ]
 
     # Monthly token limits for abuse protection
@@ -144,3 +144,4 @@ class Config:
 
     # Referral settings
     REFERRAL_REWARD_DAYS = 10
+
