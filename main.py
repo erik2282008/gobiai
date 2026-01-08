@@ -754,6 +754,7 @@ https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}""",
 
 🔗 <b>Your referral link:</b>
 https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}"""
+    }
     await message.answer(ref_text[lang], reply_markup=get_referral_keyboard(lang))
 
 @dp.message(F.text == "🆘 Помощь")
@@ -1166,4 +1167,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
