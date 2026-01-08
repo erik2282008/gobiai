@@ -1179,19 +1179,20 @@ async def main():
     logger.info("Starting GobiAI bot with all features...")
     
     try:
-        # Проверяем подключение
+        # Удаляем вебхук перед запуском polling
+        await bot.delete_webhook()
         await bot.get_me()
         logger.info("Bot connected successfully")
     except Exception as e:
         logger.error(f"Bot connection failed: {e}")
         return
     
-    # Запускаем сервер для вебхуков
+    # Запускаем сервер для вебхуков ЮKassa
     runner = await start_webhook_server()
     
     logger.info("Starting bot in polling mode...")
     try:
-        await dp.start_polling(bot)
+        await dp.start_polling(bot, skip_updates=True)
     finally:
         await runner.cleanup()
 
