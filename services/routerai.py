@@ -43,7 +43,6 @@ class RouterAIService:
             ]
         
         try:
-            # Увеличиваем таймаут до 120 секунд
             timeout = aiohttp.ClientTimeout(total=120)
             
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -55,10 +54,8 @@ class RouterAIService:
                     
                     if response.status == 200:
                         data = await response.json()
-                        # Безопасное извлечение ответа
                         if "choices" in data and len(data["choices"]) > 0:
                             response_content = data["choices"][0].get("message", {}).get("content", "")
-                            # Очистка ответа от XML тегов
                             cleaned_response = self.clean_response(response_content)
                             
                             return {
@@ -89,75 +86,14 @@ class RouterAIService:
                 "error": f"Connection error: {str(e)}"
             }
     
-    async def generate_image(self, prompt, model_id="google/gemma-3-4b-it"):
-        """Генерация изображения через RouterAI"""
-        try:
-            payload = {
-                "model": model_id,
-                "prompt": prompt,
-                "size": "1024x1024",
-                "quality": "standard",
-                "n": 1
-            }
-            
-            # Увеличиваем таймаут для генерации изображений
-            timeout = aiohttp.ClientTimeout(total=180)  # 3 минуты
-            
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.post(
-                    f"{self.base_url}/images/generations",
-                    json=payload,
-                    headers=self.headers
-                ) as response:
-                    
-                    if response.status == 200:
-                        data = await response.json()
-                        
-                        # Проверяем корректность ответа
-                        if data.get("data") and len(data["data"]) > 0:
-                            image_url = data["data"][0].get("url")
-                            
-                            if image_url:
-                                # Скачиваем изображение с увеличенным таймаутом
-                                async with session.get(image_url, timeout=60) as img_response:
-                                    if img_response.status == 200:
-                                        image_data = await img_response.read()
-                                        image_base64 = base64.b64encode(image_data).decode('utf-8')
-                                        
-                                        return {
-                                            "success": True,
-                                            "image_data": image_base64,
-                                            "image_url": image_url
-                                        }
-                    
-                    error_text = await response.text()
-                    return {
-                        "success": False,
-                        "error": f"Image generation error: {response.status}"
-                    }
-                        
-        except asyncio.TimeoutError:
-            return {
-                "success": False,
-                "error": "Image generation timeout (3 minutes)"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Image generation error: {str(e)}"
-            }
-    
     def clean_response(self, text):
-        """Очистка ответа от неподдерживаемых Telegram тегов"""
         if not text:
             return ""
         
-        # Удаляем XML теги которые Telegram не поддерживает
         import re
-        text = re.sub(r'<\?xml[^>]*\?>', '', text)  # Удаляем <?xml?>
-        text = re.sub(r'<[^>]*>', '', text)  # Удаляем все остальные теги
+        text = re.sub(r'<\?xml[^>]*\?>', '', text)
+        text = re.sub(r'<[^>]*>', '', text)
         
-        # Ограничение длины сообщения для Telegram
         if len(text) > 4000:
             text = text[:4000] + "..."
         
