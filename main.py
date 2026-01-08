@@ -45,17 +45,18 @@ dp = Dispatcher()
 active_generations = {}
 user_conversations = {}
 
-# ========== ЮРИДИЧЕСКИЕ ДОКУМЕНТЫ ==========
+# ========== ПОЛНЫЕ ЮРИДИЧЕСКИЕ ДОКУМЕНТЫ С ЛИМИТАМИ ==========
 LEGAL_DOCUMENTS = {
     'privacy': """
 🔒 <b>ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ GobiAI Bot</b>
 
 <b>1. ОБЩИЕ ПОЛОЖЕНИЯ</b>
-Администрация сервиса GobiAI Bot уважает вашу конфиденциальность.
+1.1. Настоящая Политика конфиденциальности регулирует обработку персональных данных.
+1.2. Использование Сервиса означает полное согласие с Политикой.
 
 <b>2. ВЛАДЕЛЕЦ</b>
-Симикян Эрик Самвелович
-Telegram: @smknnnn
+2.1. Владелец: Симикян Эрик Самвелович
+2.2. Контакты: Telegram @smknnnn
 
 <b>3. КОНТАКТЫ</b>
 По вопросам: @smknnnn
@@ -65,39 +66,90 @@ Telegram: @smknnnn
 📋 <b>ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ GobiAI Bot</b>
 
 <b>1. ОБЩИЕ ПОЛОЖЕНИЯ</b>
-Использование Сервиса означает согласие с условиями.
+1.1. Соглашение является публичной офертой.
+1.2. Использование Сервиса означает акцепт оферты.
 
-<b>2. ЛИМИТЫ</b>
-Бесплатный: 15K токенов/месяц
-Lite: 100K токенов/месяц
-И т.д.
+<b>2. ЛИМИТЫ И ОГРАНИЧЕНИЯ</b>
+2.1. <b>Бесплатный тариф:</b> 100 сообщений/день
+2.2. <b>Lite (15₽):</b> 200 сообщений/день
+2.3. <b>Lite+ (399₽):</b> 350 сообщений/день
+2.4. <b>VIP (1499₽):</b> 500 сообщений/день
+2.5. <b>VIP+ (4999₽):</b> 1000 сообщений/день
+2.6. <b>Quantum (19999₽):</b> 2000 сообщений/день
+2.7. <b>Quantum Pro (49999₽):</b> 5000 сообщений/день
+2.8. <b>Quantum Infinite (149999₽):</b> 9000 сообщений/день
 
-<b>3. КОНТАКТЫ</b>
-Telegram: @smknnnn
+<b>3. ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ</b>
+3.1. <b>Бесплатный:</b> 1 генерация/день
+3.2. <b>Lite:</b> 3 генерации/день
+3.3. <b>Lite+:</b> 5 генераций/день
+3.4. <b>VIP:</b> 7 генераций/день
+3.5. <b>VIP+:</b> 10 генераций/день
+3.6. <b>Quantum:</b> 30 генераций/день
+3.7. <b>Quantum Pro:</b> 60 генераций/день
+3.8. <b>Quantum Infinite:</b> 85 генераций/день
+
+<b>4. ОТПРАВКА ИЗОБРАЖЕНИЙ</b>
+4.1. <b>Бесплатный:</b> 2 изображения/день
+4.2. <b>Lite:</b> 5 изображений/день
+4.3. <b>Lite+:</b> 20 изображений/день
+4.4. <b>VIP:</b> 35 изображений/день
+4.5. <b>VIP+:</b> 40 изображений/день
+4.6. <b>Quantum:</b> 60 изображений/день
+4.7. <b>Quantum Pro:</b> 110 изображений/день
+4.8. <b>Quantum Infinite:</b> 250 изображений/день
+
+<b>5. ОТПРАВКА ВИДЕО</b>
+5.1. <b>Бесплатный:</b> 1 видео/день
+5.2. <b>Lite:</b> 2 видео/день
+5.3. <b>Lite+:</b> 4 видео/день
+5.4. <b>VIP:</b> 7 видео/день
+5.5. <b>VIP+:</b> 10 видео/день
+5.6. <b>Quantum:</b> 15 видео/день
+5.7. <b>Quantum Pro:</b> 22 видео/день
+5.8. <b>Quantum Infinite:</b> 50 видео/день
+
+<b>6. МЕСЯЧНЫЕ ЛИМИТЫ ТОКЕНОВ</b>
+6.1. <b>Бесплатный:</b> 15,000 токенов/месяц
+6.2. <b>Литe:</b> 100,000 токенов/месяц
+6.3. <b>Lite+:</b> 220,000 токенов/месяц
+6.4. <b>VIP:</b> 600,000 токенов/месяц
+6.5. <b>VIP+:</b> 700,000 токенов/месяц
+6.6. <b>Quantum:</b> 750,000 токенов/месяц
+6.7. <b>Quantum Pro:</b> 800,000 токенов/месяц
+6.8. <b>Quantum Infinite:</b> 900,000 токенов/месяц
+
+<b>7. ОГРАНИЧЕНИЕ ОТВЕТСТВЕННОСТИ</b>
+7.1. Администрация НЕ НЕСЕТ ОТВЕТСТВЕННОСТИ.
+7.2. Максимальная ответственность ограничена стоимостью подписки.
 """,
 
     'payment': """
-💳 <b>УСЛОВИЯ ОПЛАТЫ GobiAI Bot</b>
+💳 <b>УСЛОВИЯ ОПЛАТЫ И ВОЗВРАТОВ GobiAI Bot</b>
 
 <b>1. ОБЩИЕ ПОЛОЖЕНИЯ</b>
-Оплата через ЮKassa.
+1.1. Оплата услуг осуществляется через ЮKassa.
+1.2. Цены указаны в российских рублях.
 
 <b>2. ВОЗВРАТ СРЕДСТВ</b>
-Возврат невозможен после начала использования.
-
-<b>3. КОНТАКТЫ</b>
-По вопросам оплаты: @smknnnn
+2.1. <b>ВОЗВРАТ СРЕДСТВ НЕВОЗМОЖЕН</b> при использовании услуг.
+2.2. <b>ЗА НЕВНИМАТЕЛЬНОСТЬ ОТВЕТСТВЕННОСТИ НЕ НЕСЕМ</b>
 """,
 
     'subscription': """
 📄 <b>ДОГОВОР ПОДПИСКИ GobiAI Bot</b>
 
 <b>1. ПРЕДМЕТ ДОГОВОРА</b>
-Предоставление доступа к AI-моделям.
+1.1. Предоставление доступа к AI-моделям по подписке.
+1.2. Договор является публичной офертой.
 
-<b>2. РЕКВИЗИТЫ</b>
-Владелец: Симикян Эрик Самвелович
-Контакт: @smknnnn
+<b>2. УСЛОВИЯ ПОДПИСКИ</b>
+2.1. Подписка действует 30 дней с момента активации.
+2.2. Подробные лимиты указаны в Пользовательском соглашении.
+
+<b>3. ОТВЕТСТВЕННОСТЬ</b>
+3.1. Администрация не гарантирует бесперебойную работу.
+3.2. <b>ВОЗВРАТ СРЕДСТВ ПРИ ДОСРОЧНОМ ПРЕКРАЩЕНИИ НЕВОЗМОЖЕН</b>.
 """
 }
 
@@ -132,9 +184,8 @@ def get_models_keyboard(user_subscription, lang='ru'):
         if category in Config.AI_MODELS:
             for model in Config.AI_MODELS[category]:
                 name = model['name'] if lang == 'ru' else model['name_en']
-                emoji = model.get('emoji', '')
                 keyboard.append([
-                    InlineKeyboardButton(text=f"{emoji} {name}", callback_data=f"info_{model['id']}"),
+                    InlineKeyboardButton(text=f"ℹ️ {name}", callback_data=f"info_{model['id']}"),
                     InlineKeyboardButton(text="✅ Выбрать", callback_data=f"model_{model['id']}")
                 ])
     
@@ -166,9 +217,8 @@ def get_api_key_keyboard(lang='ru'):
         
         if model:
             name = model['name'] if lang == 'ru' else model['name_en']
-            emoji = model.get('emoji', '')
             keyboard.append([
-                InlineKeyboardButton(text=f"{emoji} {name}", callback_data=f"api_info_{model_id}"),
+                InlineKeyboardButton(text=f"ℹ️ {name} - {price}₽", callback_data=f"api_info_{model_id}"),
                 InlineKeyboardButton(text="🔑 Купить", callback_data=f"api_{model_id}")
             ])
     
@@ -223,11 +273,10 @@ def get_payment_check_keyboard(payment_id):
         [InlineKeyboardButton(text="🔙 Отмена", callback_data="back_to_menu")]
     ])
 
-# ========== ТЕКСТЫ ==========
+# ========== ТЕКСТЫ БЕЗ ЛИМИТОВ ==========
 def get_model_info_text(model, lang='ru'):
-    emoji = model.get('emoji', '')
     if lang == 'ru':
-        return f"""{emoji} <b>{model['name']}</b>
+        return f"""🤖 <b>{model['name']}</b>
 
 📝 {model['description_ru']}
 
@@ -239,7 +288,7 @@ def get_model_info_text(model, lang='ru'):
 {"✅ Видео" if model['supports_video'] else "❌ Видео"} 
 {"✅ Аудио" if model['supports_audio'] else "❌ Аудио"}"""
     else:
-        return f"""{emoji} <b>{model['name_en']}</b>
+        return f"""🤖 <b>{model['name_en']}</b>
 
 📝 {model['description_en']}
 
@@ -256,18 +305,14 @@ def get_plan_info_text(plan, lang='ru'):
         return f"""💎 <b>{plan['name']}</b>
 
 💰 Цена: {plan['price']} руб/месяц
-📈 Лимит сообщений: {plan['daily_limit']}/день
-🖼 Генерация изображений: {plan['image_generate']}/день
-📤 Отправка изображений: {plan['image_send']}/день
-🎥 Отправка видео: {plan['video_send']}/день"""
+📅 Срок: 30 дней
+✨ Доступ к премиум моделям"""
     else:
         return f"""💎 <b>{plan['name_en']}</b>
 
 💰 Price: {plan['price']} RUB/month
-📈 Message limit: {plan['daily_limit']}/day
-🖼 Image generation: {plan['image_generate']}/day
-📤 Image sending: {plan['image_send']}/day
-🎥 Video sending: {plan['video_send']}/day"""
+📅 Duration: 30 days
+✨ Access to premium models"""
 
 async def check_payment_status(payment_id, yookassa_id, user_id):
     try:
@@ -356,28 +401,40 @@ async def handle_generate_command(message: types.Message):
     
     lang = user['language']
     msg = await message.answer("🎨 <b>Генерация изображения...</b>")
+    active_generations[message.from_user.id] = True
     
     try:
-        result = await routerai_service.generate_image(prompt)
+        # Используем бесплатную Gemma 3 4B для генерации
+        result = await routerai_service.generate_image(prompt, model_id="google/gemma-3-4b-it")
         
-        if result['success']:
+        if result['success'] and active_generations.get(message.from_user.id):
             db.update_media_usage(user['user_id'], 'image_generate')
             
             if result.get('image_data'):
                 image_data = base64.b64decode(result['image_data'])
                 await message.answer_photo(
                     types.BufferedInputFile(image_data, filename="generated_image.jpg"),
-                    caption=f"🎨 <b>Сгенерированное изображение</b>\n\n{prompt}"
+                    caption=f"🎨 <b>Сгенерированное изображение</b>\n\nЗапрос: {prompt}"
                 )
                 await msg.delete()
             else:
                 await msg.edit_text("✅ <b>Изображение сгенерировано!</b>")
         elif not result['success']:
-            await msg.edit_text(f"❌ <b>Ошибка генерации:</b>\n\n{result['error']}")
+            # Улучшенная обработка ошибок
+            error_msg = result.get('error', 'Неизвестная ошибка')
+            if "timeout" in error_msg.lower():
+                error_msg = "⏳ Время генерации истекло. Попробуйте позже."
+            elif "generat" in error_msg.lower():
+                error_msg = "🚫 Сервис недоступен. Попробуйте позже."
+            else:
+                error_msg = f"❌ Ошибка генерации: {error_msg}"
+            await msg.edit_text(error_msg)
             
     except Exception as e:
         logger.error(f"Image generation error: {e}")
         await msg.edit_text("❌ <b>Ошибка при генерации изображения</b>")
+    finally:
+        active_generations.pop(message.from_user.id, None)
 
 # ========== ОБРАБОТКА МЕДИАФАЙЛОВ ==========
 @dp.message(F.photo)
@@ -386,21 +443,33 @@ async def handle_photo(message: types.Message):
     if not user: 
         await message.answer("❌ Сначала используйте /start")
         return
-    
+        
     # Проверяем лимиты отправки изображений
     can_send, error_msg = db.can_send_image(user['user_id'])
     if not can_send: 
         await message.answer(f"❌ {error_msg}")
         return
-    
+        
     # Проверяем общие лимиты
     can_use, error_msg = db.can_use_model(user['user_id'])
     if not can_use: 
         await message.answer(f"❌ {error_msg}")
         return
-    
+        
     db.increment_daily_usage(user['user_id'])
     db.update_media_usage(user['user_id'], 'image_send')
+    
+    # Проверяем поддерживает ли текущая модель изображения
+    current_model_supports_images = False
+    for category_models in Config.AI_MODELS.values():
+        for model in category_models:
+            if model['id'] == user['current_model']:
+                current_model_supports_images = model['supports_images']
+                break
+    
+    if not current_model_supports_images:
+        await message.answer("❌ Текущая модель не поддерживает изображения")
+        return
     
     # Скачиваем изображение
     try:
@@ -412,23 +481,40 @@ async def handle_photo(message: types.Message):
         return
     
     msg = await message.answer("⏳ <b>Обработка изображения...</b>")
+    active_generations[message.from_user.id] = True
     
     try:
+        # Проверяем месячные лимиты токенов
+        can_use, error_msg = db.check_monthly_token_limits(message.from_user.id, 500, 1500)
+        if not can_use:
+            await msg.edit_text(f"❌ {error_msg}")
+            return
+        
         result = await routerai_service.send_message(
             user['current_model'], 
             message.caption or "Опиши это изображение",
             extra_data={"image": image_data}
         )
         
-        if result['success']:
+        if result['success'] and active_generations.get(message.from_user.id):
             response_text = f"🤖 <b>Ответ:</b>\n\n{result['response']}"
             await msg.edit_text(response_text)
-        else:
-            await msg.edit_text(f"❌ <b>Ошибка:</b>\n\n{result['error']}")
+            
+            # Обновляем счетчики токенов
+            db.update_token_usage(message.from_user.id, 500, 1500)
+        elif not result['success']:
+            error_msg = result.get('error', 'Неизвестная ошибка')
+            if "timeout" in error_msg.lower():
+                error_msg = "⏳ Время обработки истекло."
+            else:
+                error_msg = f"❌ Ошибка: {error_msg}"
+            await msg.edit_text(error_msg)
             
     except Exception as e:
         logger.error(f"Photo processing error: {e}")
         await msg.edit_text("❌ <b>Ошибка обработки изображения</b>")
+    finally:
+        active_generations.pop(message.from_user.id, None)
 
 @dp.message(F.video)
 async def handle_video(message: types.Message):
@@ -436,39 +522,43 @@ async def handle_video(message: types.Message):
     if not user: 
         await message.answer("❌ Сначала используйте /start")
         return
-    
+        
     # Проверяем лимиты отправки видео
     can_send, error_msg = db.can_send_video(user['user_id'])
     if not can_send: 
         await message.answer(f"❌ {error_msg}")
         return
-    
+        
     # Проверяем общие лимиты
     can_use, error_msg = db.can_use_model(user['user_id'])
     if not can_use: 
         await message.answer(f"❌ {error_msg}")
         return
-    
+        
     db.increment_daily_usage(user['user_id'])
     db.update_media_usage(user['user_id'], 'video_send')
     
     msg = await message.answer("⏳ <b>Обработка видео...</b>")
+    active_generations[message.from_user.id] = True
     
     try:
         result = await routerai_service.send_message(
             user['current_model'], 
-            f"Пользователь отправил видео. Описание: {message.caption or 'нет описания'}"
+            f"Пользователь отправил видео. Описание: {message.caption or 'нет описания'}. Проанализируй видео на основе запроса."
         )
         
-        if result['success']:
+        if result['success'] and active_generations.get(message.from_user.id):
             response_text = f"🤖 <b>Анализ видео:</b>\n\n{result['response']}"
             await msg.edit_text(response_text)
-        else:
-            await msg.edit_text(f"❌ <b>Ошибка:</b>\n\n{result['error']}")
+        elif not result['success']:
+            error_msg = result.get('error', 'Неизвестная ошибка')
+            await msg.edit_text(f"❌ Ошибка: {error_msg}")
             
     except Exception as e:
         logger.error(f"Video processing error: {e}")
         await msg.edit_text("❌ <b>Ошибка обработки видео</b>")
+    finally:
+        active_generations.pop(message.from_user.id, None)
 
 @dp.message(F.document)
 async def handle_document(message: types.Message):
@@ -476,31 +566,35 @@ async def handle_document(message: types.Message):
     if not user: 
         await message.answer("❌ Сначала используйте /start")
         return
-    
+        
     can_use, error_msg = db.can_use_model(user['user_id'])
     if not can_use: 
         await message.answer(f"❌ {error_msg}")
         return
-    
+        
     db.increment_daily_usage(user['user_id'])
     
     msg = await message.answer("⏳ <b>Обработка документа...</b>")
+    active_generations[message.from_user.id] = True
     
     try:
         result = await routerai_service.send_message(
             user['current_model'], 
-            f"Пользователь отправил документ. Название: {message.document.file_name}. Описание: {message.caption or 'нет описания'}"
+            f"Пользователь отправил документ. Название: {message.document.file_name}. Описание: {message.caption or 'нет описания'}."
         )
         
-        if result['success']:
+        if result['success'] and active_generations.get(message.from_user.id):
             response_text = f"🤖 <b>Анализ документа:</b>\n\n{result['response']}"
             await msg.edit_text(response_text)
-        else:
-            await msg.edit_text(f"❌ <b>Ошибка:</b>\n\n{result['error']}")
+        elif not result['success']:
+            error_msg = result.get('error', 'Неизвестная ошибка')
+            await msg.edit_text(f"❌ Ошибка: {error_msg}")
             
     except Exception as e:
         logger.error(f"Document processing error: {e}")
         await msg.edit_text("❌ <b>Ошибка обработки документа</b>")
+    finally:
+        active_generations.pop(message.from_user.id, None)
 
 # ========== ОСНОВНЫЕ ОБРАБОТЧИКИ ==========
 @dp.message(Command("start"))
@@ -565,10 +659,10 @@ async def handle_profile(message: types.Message):
 👥 Приглашено рефералов: {user['referral_count']}
 
 📊 <b>Использовано сегодня:</b>
-Сообщения: {user['daily_used']}/{plan['daily_limit'] if plan else 100}
-Сгенерировано изображений: {user['images_generated_today']}/{plan['image_generate'] if plan else 1}
-Отправлено изображений: {user['images_sent_today']}/{plan['image_send'] if plan else 2}
-Отправлено видео: {user['videos_sent_today']}/{plan['video_send'] if plan else 1}
+Сообщения: {user['daily_used']}
+Сгенерировано изображений: {user['images_generated_today']}
+Отправлено изображений: {user['images_sent_today']}
+Отправлено видео: {user['videos_sent_today']}
 
 🤖 Текущая модель: {user['current_model']}""",
         'en': f"""👤 <b>Your Profile</b>
@@ -579,10 +673,10 @@ async def handle_profile(message: types.Message):
 👥 Referrals invited: {user['referral_count']}
 
 📊 <b>Used today:</b>
-Messages: {user['daily_used']}/{plan['daily_limit'] if plan else 100}
-Images generated: {user['images_generated_today']}/{plan['image_generate'] if plan else 1}
-Images sent: {user['images_sent_today']}/{plan['image_send'] if plan else 2}
-Videos sent: {user['videos_sent_today']}/{plan['video_send'] if plan else 1}
+Messages: {user['daily_used']}
+Images generated: {user['images_generated_today']}
+Images sent: {user['images_sent_today']}
+Videos sent: {user['videos_sent_today']}
 
 🤖 Current model: {user['current_model']}"""
     }
@@ -626,7 +720,7 @@ async def handle_referral(message: types.Message):
 
 🔗 <b>Ваша реферальная ссылка:</b>
 https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}""",
-    'en': f"""📤 <b>Referral System</b>
+        'en': f"""📤 <b>Referral System</b>
 
 👥 Users invited: {user['referral_count']}
 
@@ -929,23 +1023,50 @@ async def handle_message(message: types.Message):
     
     lang = user['language']
     msg = await message.answer("⏳ <b>Генерация началась...</b>")
+    active_generations[user_id] = True
     
     try:
+        # Оцениваем токены для запроса
+        input_tokens = len(message.text) * 2
+        output_estimate = 1500
+        total_tokens = input_tokens + output_estimate
+        
+        # Проверяем месячные лимиты
+        can_use, error_msg = db.check_monthly_token_limits(user_id, input_tokens, output_estimate)
+        if not can_use:
+            await msg.edit_text(f"❌ {error_msg}")
+            return
+        
         result = await routerai_service.send_message(
             user['current_model'], 
             message.text,
             user_conversations[user_id][:-1]
         )
         
-        if result['success']:
+        if result['success'] and active_generations.get(user_id):
             user_conversations[user_id].append({"role": "assistant", "content": result['response']})
-            await msg.edit_text(f"🤖 <b>Ответ:</b>\n\n{result['response']}")
-        else:
-            await msg.edit_text(f"❌ <b>Ошибка:</b>\n\n{result['error']}")
+            cleaned_response = result['response']
+            await msg.edit_text(f"🤖 <b>Ответ:</b>\n\n{cleaned_response}")
+            
+            # Оцениваем реальное количество токенов
+            if 'usage' in result:
+                actual_input = result['usage'].get('prompt_tokens', 0)
+                actual_output = result['usage'].get('completion_tokens', 0)
+                db.update_token_usage(user_id, actual_input, actual_output)
+            
+        elif not result['success']:
+            error_msg = result.get('error', 'Неизвестная ошибка')
+            if "timeout" in error_msg.lower():
+                error_msg = "⏳ Время ответа истекло."
+            else:
+                error_msg = f"❌ Ошибка: {error_msg}"
+            await msg.edit_text(error_msg)
             
     except Exception as e:
         logger.error(f"Message processing error: {e}")
         await msg.edit_text("❌ <b>Ошибка соединения</b>\n\nПопробуйте позже.")
+    finally:
+        active_generations.pop(user_id, None)
 
 # ========== ВЕБХУК YOOKASSA ==========
 async def yookassa_webhook(request):
