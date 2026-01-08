@@ -18,7 +18,6 @@ from aiogram.types import (
 )
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 from config import Config
 from database import db
@@ -112,7 +111,7 @@ LEGAL_DOCUMENTS = {
 
 <b>6. МЕСЯЧНЫЕ ЛИМИТЫ ТОКЕНОВ</b>
 6.1. <b>Бесплатный:</b> 15,000 токенов/месяц
-6.2. <b>Лите:</b> 100,000 токенов/месяц
+6.2. <b>Литe:</b> 100,000 токенов/месяц
 6.3. <b>Lite+:</b> 220,000 токенов/месяц
 6.4. <b>VIP:</b> 600,000 токенов/месяц
 6.5. <b>VIP+:</b> 700,000 токенов/месяц
@@ -1166,36 +1165,33 @@ async def yookassa_webhook(request):
         logger.error(f"Webhook error: {e}")
         return web.Response(status=500, text='Error')
 
-async def on_startup(bot: Bot):
-    await bot.delete_webhook()
-    await bot.set_webhook(f"https://{Config.WEBHOOK_DOMAIN}/webhook")
+async def start_webhook_server():
+    app = web.Application()
+    app.router.add_post('/yookassa-webhook', yookassa_webhook)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', Config.PORT)
+    await site.start()
+    logger.info(f"Webhook server started on port {Config.PORT}")
+    return runner
 
 async def main():
-    logger.info("Starting GobiAI bot with webhook...")
+    logger.info("Starting GobiAI bot with all features...")
     
     try:
+        # Проверяем подключение
         await bot.get_me()
         logger.info("Bot connected successfully")
     except Exception as e:
         logger.error(f"Bot connection failed: {e}")
         return
     
-    app = web.Application()
-    app.router.add_post("/yookassa-webhook", yookassa_webhook)
-    app.router.add_post("/webhook", SimpleRequestHandler(dp, bot).handle)
+    # Запускаем сервер для вебхуков
+    runner = await start_webhook_server()
     
-    dp.startup.register(on_startup)
-    setup_application(app, dp, bot=bot)
-    
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', Config.PORT)
-    await site.start()
-    
-    logger.info(f"Webhook server started on port {Config.PORT}")
-    
+    logger.info("Starting bot in polling mode...")
     try:
-        await asyncio.Event().wait()  # Run forever
+        await dp.start_polling(bot)
     finally:
         await runner.cleanup()
 
