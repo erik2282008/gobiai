@@ -144,4 +144,3 @@ class Config:
 
     # Referral settings
     REFERRAL_REWARD_DAYS = 10
-
