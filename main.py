@@ -111,7 +111,7 @@ LEGAL_DOCUMENTS = {
 
 <b>6. МЕСЯЧНЫЕ ЛИМИТЫ ТОКЕНОВ</b>
 6.1. <b>Бесплатный:</b> 15,000 токенов/месяц
-6.2. <b>Литe:</b> 100,000 токенов/месяц
+6.2. <b>Лите:</b> 100,000 токенов/месяц
 6.3. <b>Lite+:</b> 220,000 токенов/месяц
 6.4. <b>VIP:</b> 600,000 токенов/месяц
 6.5. <b>VIP+:</b> 700,000 токенов/месяц
@@ -273,9 +273,9 @@ def get_payment_check_keyboard(payment_id):
         [InlineKeyboardButton(text="🔙 Отмена", callback_data="back_to_menu")]
     ])
 
-# ========== ИНФОРМАЦИЯ О ПОДПИСКАХ С МОДЕЛЯМИ ==========
+# ========== ИНФОРМАЦИЯ О ПОДПИСКАХ БЕЗ ЛИМИТОВ ==========
 def get_plan_info_text(plan, lang='ru'):
-    """Возвращает подробную информацию о подписке с моделями"""
+    """Возвращает информацию о подписке без лимитов"""
     available_categories = Config.SUBSCRIPTION_ACCESS.get(plan['id'], ['free'])
     models_text = ""
     
@@ -296,11 +296,7 @@ def get_plan_info_text(plan, lang='ru'):
 <b>Включенные модели:</b>
 {models_text}
 
-<b>Лимиты:</b>
-📊 {plan['daily_limit']} сообщений/день
-🖼 {plan['image_generate']} генераций изображений/день
-📤 {plan['image_send']} отправок изображений/день
-🎬 {plan['video_send']} отправок видео/день"""
+<i>Подробные лимиты использования указаны в Пользовательском соглашении</i>"""
     else:
         return f"""💎 <b>{plan['name_en']}</b>
 
@@ -311,11 +307,7 @@ def get_plan_info_text(plan, lang='ru'):
 <b>Included models:</b>
 {models_text}
 
-<b>Limits:</b>
-📊 {plan['daily_limit']} messages/day
-🖼 {plan['image_generate']} image generations/day
-📤 {plan['image_send']} image sends/day
-🎬 {plan['video_send']} video sends/day"""
+<i>Detailed usage limits are specified in the User Agreement</i>"""
 
 def get_model_info_text(model, lang='ru'):
     if lang == 'ru':
@@ -394,7 +386,7 @@ async def show_legal_doc(callback: types.CallbackQuery):
         await callback.answer("❌ Документ не найден")
     await callback.answer()
 
-# ========== УЛУЧШЕННАЯ ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ ==========
+# ========== ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ ==========
 @dp.message(F.text == "🎨 Сгенерировать фото")
 @dp.message(F.text == "🎨 Generate image")
 async def handle_generate_image_menu(message: types.Message):
@@ -433,36 +425,155 @@ async def handle_generate_command(message: types.Message):
     active_generations[message.from_user.id] = True
     
     try:
-        # Используем специальную модель для генерации изображений
-        result = await routerai_service.generate_image(prompt)
+        # Используем модель, которая умеет генерировать изображения
+        result = await routerai_service.send_message(
+            "google/gemini-2.5-flash-image", 
+            f"Сгенерируй изображение по описанию: '{prompt}'. Верни только URL готового изображения."
+        )
         
         if result['success'] and active_generations.get(message.from_user.id):
+            response_text = result['response'].strip()
             db.update_media_usage(user['user_id'], 'image_generate')
             
-            if result.get('image_data'):
-                image_data = base64.b64decode(result['image_data'])
-                await message.answer_photo(
-                    types.BufferedInputFile(image_data, filename="generated_image.jpg"),
-                    caption=f"🎨 <b>Сгенерированное изображение</b>\n\nЗапрос: {prompt}"
-                )
-                await msg.delete()
+            # Проверяем наличие URL изображения
+            if response_text.startswith('http') and any(ext in response_text.lower() for ext in ['.jpg', '.jpeg', '.png', '.webp']):
+                try:
+                    await message.answer_photo(
+                        response_text,
+                        caption=f"🎨 <b>Сгенерированное изображение</b>\n\nЗапрос: {prompt}"
+                    )
+                    await msg.delete()
+                except:
+                    await msg.edit_text(f"🖼️ <b>Изображение сгенерировано!</b>\n\nURL: {response_text}\n\nЗапрос: {prompt}")
             else:
-                await msg.edit_text("❌ Не удалось загрузить изображение")
+                await msg.edit_text(f"🎨 <b>Результат генерации:</b>\n\n{response_text}")
+                
         elif not result['success']:
             error_msg = result.get('error', 'Неизвестная ошибка')
-            if "timeout" in error_msg.lower():
-                error_msg = "⏳ Время генерации истекло. Попробуйте позже."
-            elif "limit" in error_msg.lower():
-                error_msg = "🚫 Достигнут лимит генерации. Попробуйте позже."
-            else:
-                error_msg = f"❌ Ошибка генерации: {error_msg}"
-            await msg.edit_text(error_msg)
+            await msg.edit_text(f"❌ Ошибка генерации: {error_msg}")
             
     except Exception as e:
         logger.error(f"Image generation error: {e}")
         await msg.edit_text("❌ <b>Ошибка при генерации изображения</b>")
     finally:
         active_generations.pop(message.from_user.id, None)
+
+# ========== ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ ==========
+@dp.message(F.text)
+async def handle_message(message: types.Message):
+    # Пропускаем команды меню
+    menu_commands = ["🧠 Выбрать модель", "👤 Мой профиль", "💳 Купить подписку", "🔑 Купить API", 
+                    "🎨 Сгенерировать фото", "📤 Рефералка", "🆘 Помощь",
+                    "🧠 Choose model", "👤 My profile", "💳 Buy subscription", "🔑 Buy API",
+                    "🎨 Generate image", "📤 Referral", "🆘 Help"]
+    
+    if message.text in menu_commands:
+        return
+    
+    user = db.get_user(message.from_user.id)
+    if not user: 
+        await message.answer("❌ Сначала используйте /start")
+        return
+        
+    # Проверяем общие лимиты
+    can_use, error_msg = db.can_use_model(user['user_id'])
+    if not can_use: 
+        lang = user['language']
+        await message.answer(f"❌ {error_msg}")
+        return
+        
+    db.increment_daily_usage(user['user_id'])
+    
+    user_id = message.from_user.id
+    if user_id not in user_conversations:
+        user_conversations[user_id] = []
+    
+    user_conversations[user_id].append({"role": "user", "content": message.text})
+    if len(user_conversations[user_id]) > 10:
+        user_conversations[user_id] = user_conversations[user_id][-10:]
+    
+    lang = user['language']
+    msg = await message.answer("⏳ <b>Генерация началась...</b>")
+    active_generations[user_id] = True
+    
+    try:
+        # Проверяем, является ли запрос просьбой сгенерировать изображение
+        is_image_request = any(word in message.text.lower() for word in [
+            'сгенерируй', 'генерация', 'изображение', 'картинка', 'фото', 'picture', 'generate', 'image',
+            'нарисуй', 'draw', 'создай', 'create', 'иллюстрация', 'illustration'
+        ])
+        
+        if is_image_request:
+            # Проверяем лимиты генерации изображений
+            can_generate, error_msg = db.can_generate_image(user_id)
+            if not can_generate:
+                await msg.edit_text(f"❌ {error_msg}")
+                return
+            
+            # Используем модель для генерации изображений
+            result = await routerai_service.send_message(
+                "google/gemini-2.5-flash-image", 
+                f"Пользователь просит сгенерировать изображение: '{message.text}'. Верни только URL готового изображения."
+            )
+            
+            if result['success'] and active_generations.get(user_id):
+                response_text = result['response'].strip()
+                db.update_media_usage(user_id, 'image_generate')
+                
+                # Проверяем наличие URL изображения
+                if response_text.startswith('http') and any(ext in response_text.lower() for ext in ['.jpg', '.jpeg', '.png', '.webp']):
+                    try:
+                        await message.answer_photo(
+                            response_text,
+                            caption=f"🎨 <b>Сгенерированное изображение</b>\n\nЗапрос: {message.text}"
+                        )
+                        await msg.delete()
+                    except:
+                        await msg.edit_text(f"🖼️ <b>Изображение сгенерировано!</b>\n\nURL: {response_text}\n\nЗапрос: {message.text}")
+                else:
+                    await msg.edit_text(f"🎨 <b>Результат генерации:</b>\n\n{response_text}")
+                
+                return
+        
+        # Обычный текстовый запрос
+        input_tokens = len(message.text) * 2
+        output_estimate = 1500
+        
+        # Проверяем месячные лимиты
+        can_use, error_msg = db.check_monthly_token_limits(user_id, input_tokens, output_estimate)
+        if not can_use:
+            await msg.edit_text(f"❌ {error_msg}")
+            return
+        
+        result = await routerai_service.send_message(
+            user['current_model'], 
+            message.text,
+            user_conversations[user_id][:-1]
+        )
+        
+        if result['success'] and active_generations.get(user_id):
+            user_conversations[user_id].append({"role": "assistant", "content": result['response']})
+            await msg.edit_text(f"🤖 <b>Ответ:</b>\n\n{result['response']}")
+            
+            # Обновляем счетчики токенов
+            if 'usage' in result:
+                actual_input = result['usage'].get('prompt_tokens', 0)
+                actual_output = result['usage'].get('completion_tokens', 0)
+                db.update_token_usage(user_id, actual_input, actual_output)
+        
+        elif not result['success']:
+            error_msg = result.get('error', 'Неизвестная ошибка')
+            if "timeout" in error_msg.lower():
+                error_msg = "⏳ Время ответа истекло."
+            else:
+                error_msg = f"❌ Ошибка: {error_msg}"
+            await msg.edit_text(error_msg)
+            
+    except Exception as e:
+        logger.error(f"Message processing error: {e}")
+        await msg.edit_text("❌ <b>Ошибка соединения</b>\n\nПопробуйте позже.")
+    finally:
+        active_generations.pop(user_id, None)
 
 # ========== ОБРАБОТКА МЕДИАФАЙЛОВ ==========
 @dp.message(F.photo)
@@ -1014,87 +1125,6 @@ https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}
     }
     await callback.message.answer(ref_text[user['language']])
     await callback.answer()
-
-# ========== ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ ==========
-@dp.message(F.text)
-async def handle_message(message: types.Message):
-    # Пропускаем команды меню
-    menu_commands = ["🧠 Выбрать модель", "👤 Мой профиль", "💳 Купить подписку", "🔑 Купить API", 
-                    "🎨 Сгенерировать фото", "📤 Рефералка", "🆘 Помощь",
-                    "🧠 Choose model", "👤 My profile", "💳 Buy subscription", "🔑 Buy API",
-                    "🎨 Generate image", "📤 Referral", "🆘 Help"]
-    
-    if message.text in menu_commands:
-        return
-    
-    user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
-        
-    # Проверяем общие лимиты
-    can_use, error_msg = db.can_use_model(user['user_id'])
-    if not can_use: 
-        lang = user['language']
-        await message.answer(f"❌ {error_msg}")
-        return
-        
-    db.increment_daily_usage(user['user_id'])
-    
-    user_id = message.from_user.id
-    if user_id not in user_conversations:
-        user_conversations[user_id] = []
-    
-    user_conversations[user_id].append({"role": "user", "content": message.text})
-    if len(user_conversations[user_id]) > 10:
-        user_conversations[user_id] = user_conversations[user_id][-10:]
-    
-    lang = user['language']
-    msg = await message.answer("⏳ <b>Генерация началась...</b>")
-    active_generations[user_id] = True
-    
-    try:
-        # Оцениваем токены для запроса
-        input_tokens = len(message.text) * 2
-        output_estimate = 1500
-        total_tokens = input_tokens + output_estimate
-        
-        # Проверяем месячные лимиты
-        can_use, error_msg = db.check_monthly_token_limits(user_id, input_tokens, output_estimate)
-        if not can_use:
-            await msg.edit_text(f"❌ {error_msg}")
-            return
-        
-        result = await routerai_service.send_message(
-            user['current_model'], 
-            message.text,
-            user_conversations[user_id][:-1]
-        )
-        
-        if result['success'] and active_generations.get(user_id):
-            user_conversations[user_id].append({"role": "assistant", "content": result['response']})
-            cleaned_response = result['response']
-            await msg.edit_text(f"🤖 <b>Ответ:</b>\n\n{cleaned_response}")
-            
-            # Оцениваем реальное количество токенов
-            if 'usage' in result:
-                actual_input = result['usage'].get('prompt_tokens', 0)
-                actual_output = result['usage'].get('completion_tokens', 0)
-                db.update_token_usage(user_id, actual_input, actual_output)
-            
-        elif not result['success']:
-            error_msg = result.get('error', 'Неизвестная ошибка')
-            if "timeout" in error_msg.lower():
-                error_msg = "⏳ Время ответа истекло."
-            else:
-                error_msg = f"❌ Ошибка: {error_msg}"
-            await msg.edit_text(error_msg)
-            
-    except Exception as e:
-        logger.error(f"Message processing error: {e}")
-        await msg.edit_text("❌ <b>Ошибка соединения</b>\n\nПопробуйте позже.")
-    finally:
-        active_generations.pop(user_id, None)
 
 # ========== ВЕБХУК YOOKASSA ==========
 async def yookassa_webhook(request):
