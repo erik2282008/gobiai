@@ -24,7 +24,7 @@ class Config:
     CURRENCY = "RUB"
     
     # Image Generation Model
-    IMAGE_GENERATION_MODEL = "openai/gpt-5-image-mini"
+    IMAGE_GENERATION_MODEL = "google/gemini-2.5-flash-image"
 
     # AI Models - Gemma 3 4B бесплатная для всех
     AI_MODELS = {
@@ -106,37 +106,37 @@ class Config:
          "daily_limit": 100, "image_send": 2, "image_generate": 1, "video_send": 1},
         
         {"id": "lite", "name": "💎 Lite", "name_en": "💎 Lite", "price": 15, 
-         "daily_limit": 200, "image_send": 5, "image_generate": 1, "video_send": 1},
+         "daily_limit": 200, "image_send": 5, "image_generate": 3, "video_send": 2},
 
         {"id": "lite_plus", "name": "💎 Lite+", "name_en": "💎 Lite+", "price": 399, 
-         "daily_limit": 350, "image_send": 10, "image_generate": 3, "video_send": 2},
+         "daily_limit": 350, "image_send": 20, "image_generate": 5, "video_send": 4},
          
         {"id": "vip", "name": "⭐ VIP", "name_en": "⭐ VIP", "price": 1499, 
-         "daily_limit": 500, "image_send": 15, "image_generate": 2, "video_send": 2},
+         "daily_limit": 500, "image_send": 35, "image_generate": 7, "video_send": 7},
          
         {"id": "vip_plus", "name": "🎨 VIP+", "name_en": "🎨 VIP+", "price": 4999, 
-         "daily_limit": 1000, "image_send": 30, "image_generate": 10, "video_send": 5},
+         "daily_limit": 1000, "image_send": 40, "image_generate": 10, "video_send": 10},
          
         {"id": "quantum", "name": "🚀 Quantum", "name_en": "🚀 Quantum", "price": 19999, 
-         "daily_limit": 2000, "image_send": 50, "image_generate": 30, "video_send": 10},
+         "daily_limit": 2000, "image_send": 60, "image_generate": 30, "video_send": 15},
          
         {"id": "quantum_pro", "name": "🔬 Quantum Pro", "name_en": "🔬 Quantum Pro", "price": 49999, 
-         "daily_limit": 5000, "image_send": 100, "image_generate": 70, "video_send": 20},
+         "daily_limit": 5000, "image_send": 110, "image_generate": 60, "video_send": 22},
          
         {"id": "quantum_infinite", "name": "🌌 Quantum Infinite", "name_en": "🌌 Quantum Infinite", "price": 149999, 
-         "daily_limit": 9000, "image_send": 250, "image_generate": 100, "video_send": 50},
+         "daily_limit": 9000, "image_send": 250, "image_generate": 85, "video_send": 50},
     ]
 
     # Monthly token limits for abuse protection
     MAX_MONTHLY_TOKENS = {
-        "free": 25000,        # 10K токенов
-        "lite": 500000,        # 50K токенов  
-        "lite_plus": 200000,  # 100K токенов
-        "vip": 500000,        # 500K токенов
-        "vip_plus": 600000,   # 600K токенов
-        "quantum": 700000,    # 800K токенов
+        "free": 15000,        # 15K токенов
+        "lite": 100000,       # 100K токенов  
+        "lite_plus": 220000,  # 220K токенов
+        "vip": 600000,        # 600K токенов
+        "vip_plus": 700000,   # 700K токенов
+        "quantum": 750000,    # 750K токенов
         "quantum_pro": 800000, # 800K токенов
-        "quantum_infinite": 900000, # 1M токенов
+        "quantum_infinite": 900000, # 900K токенов
     }
 
     # Maximum cost protection per user (рублей)
