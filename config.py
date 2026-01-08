@@ -2,7 +2,7 @@ import os
 
 class Config:
     # Telegram
-    BOT_TOKEN = os.getenv("BOT_TOKEN", "8181189288:AAFUSATnYi4VYg79yCOobemoW8TCQqZzgE0")
+    BOT_TOKEN = os.getenv("BOT_TOKEN", "8233689106:AAGeVs0LRFC5swyMMej3WQ-SaCMORinZ924")
     ADMIN_ID = int(os.getenv("ADMIN_ID", "7979729060"))
     SUPPORT_USERNAME = os.getenv("SUPPORT_USERNAME", "@smknerik")
     
@@ -144,4 +144,5 @@ class Config:
 
     # Referral settings
     REFERRAL_REWARD_DAYS = 10
+
 
