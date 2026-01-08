@@ -273,7 +273,50 @@ def get_payment_check_keyboard(payment_id):
         [InlineKeyboardButton(text="🔙 Отмена", callback_data="back_to_menu")]
     ])
 
-# ========== ТЕКСТЫ БЕЗ ЛИМИТОВ ==========
+# ========== ИНФОРМАЦИЯ О ПОДПИСКАХ С МОДЕЛЯМИ ==========
+def get_plan_info_text(plan, lang='ru'):
+    """Возвращает подробную информацию о подписке с моделями"""
+    available_categories = Config.SUBSCRIPTION_ACCESS.get(plan['id'], ['free'])
+    models_text = ""
+    
+    for category in available_categories:
+        if category in Config.AI_MODELS:
+            for model in Config.AI_MODELS[category]:
+                name = model['name'] if lang == 'ru' else model['name_en']
+                description = model['description_ru'] if lang == 'ru' else model['description_en']
+                models_text += f"• {name}: {description}\n"
+    
+    if lang == 'ru':
+        return f"""💎 <b>{plan['name']}</b>
+
+💰 Цена: {plan['price']} руб/месяц
+📅 Срок: 30 дней
+✨ Доступ к премиум моделям
+
+<b>Включенные модели:</b>
+{models_text}
+
+<b>Лимиты:</b>
+📊 {plan['daily_limit']} сообщений/день
+🖼 {plan['image_generate']} генераций изображений/день
+📤 {plan['image_send']} отправок изображений/день
+🎬 {plan['video_send']} отправок видео/день"""
+    else:
+        return f"""💎 <b>{plan['name_en']}</b>
+
+💰 Price: {plan['price']} RUB/month
+📅 Duration: 30 days
+✨ Access to premium models
+
+<b>Included models:</b>
+{models_text}
+
+<b>Limits:</b>
+📊 {plan['daily_limit']} messages/day
+🖼 {plan['image_generate']} image generations/day
+📤 {plan['image_send']} image sends/day
+🎬 {plan['video_send']} video sends/day"""
+
 def get_model_info_text(model, lang='ru'):
     if lang == 'ru':
         return f"""🤖 <b>{model['name']}</b>
@@ -299,20 +342,6 @@ def get_model_info_text(model, lang='ru'):
 {"✅ Images" if model['supports_images'] else "❌ Images"}
 {"✅ Video" if model['supports_video'] else "❌ Video"} 
 {"✅ Audio" if model['supports_audio'] else "❌ Audio"}"""
-
-def get_plan_info_text(plan, lang='ru'):
-    if lang == 'ru':
-        return f"""💎 <b>{plan['name']}</b>
-
-💰 Цена: {plan['price']} руб/месяц
-📅 Срок: 30 дней
-✨ Доступ к премиум моделям"""
-    else:
-        return f"""💎 <b>{plan['name_en']}</b>
-
-💰 Price: {plan['price']} RUB/month
-📅 Duration: 30 days
-✨ Access to premium models"""
 
 async def check_payment_status(payment_id, yookassa_id, user_id):
     try:
@@ -365,7 +394,7 @@ async def show_legal_doc(callback: types.CallbackQuery):
         await callback.answer("❌ Документ не найден")
     await callback.answer()
 
-# ========== ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ ==========
+# ========== УЛУЧШЕННАЯ ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ ==========
 @dp.message(F.text == "🎨 Сгенерировать фото")
 @dp.message(F.text == "🎨 Generate image")
 async def handle_generate_image_menu(message: types.Message):
@@ -404,8 +433,8 @@ async def handle_generate_command(message: types.Message):
     active_generations[message.from_user.id] = True
     
     try:
-        # Используем бесплатную Gemma 3 4B для генерации
-        result = await routerai_service.generate_image(prompt, model_id="google/gemma-3-4b-it")
+        # Используем специальную модель для генерации изображений
+        result = await routerai_service.generate_image(prompt)
         
         if result['success'] and active_generations.get(message.from_user.id):
             db.update_media_usage(user['user_id'], 'image_generate')
@@ -418,14 +447,13 @@ async def handle_generate_command(message: types.Message):
                 )
                 await msg.delete()
             else:
-                await msg.edit_text("✅ <b>Изображение сгенерировано!</b>")
+                await msg.edit_text("❌ Не удалось загрузить изображение")
         elif not result['success']:
-            # Улучшенная обработка ошибок
             error_msg = result.get('error', 'Неизвестная ошибка')
             if "timeout" in error_msg.lower():
                 error_msg = "⏳ Время генерации истекло. Попробуйте позже."
-            elif "generat" in error_msg.lower():
-                error_msg = "🚫 Сервис недоступен. Попробуйте позже."
+            elif "limit" in error_msg.lower():
+                error_msg = "🚫 Достигнут лимит генерации. Попробуйте позже."
             else:
                 error_msg = f"❌ Ошибка генерации: {error_msg}"
             await msg.edit_text(error_msg)
@@ -726,7 +754,6 @@ https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}""",
 
 🔗 <b>Your referral link:</b>
 https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}"""
-    }
     await message.answer(ref_text[lang], reply_markup=get_referral_keyboard(lang))
 
 @dp.message(F.text == "🆘 Помощь")
@@ -1139,3 +1166,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
