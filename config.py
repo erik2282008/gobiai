@@ -100,31 +100,47 @@ class Config:
         "openai/o1-pro": 99999,
     }
 
-    # Subscription plans with media limits
+    # Subscription plans with media limits (БЕЗ ЛИМИТОВ В ОПИСАНИИ)
     SUBSCRIPTION_PLANS = [
         {"id": "free", "name": "🆓 Бесплатно", "name_en": "🆓 Free", "price": 0, 
-         "daily_limit": 100, "image_send": 15, "image_generate": 1, "video_send": 1},
+         "daily_limit": 100, "image_send": 15, "image_generate": 1, "video_send": 1,
+         "description_ru": "• Gemma 3 4B\n• Базовая модель",
+         "description_en": "• Gemma 3 4B\n• Basic model"},
         
         {"id": "lite", "name": "💎 Lite", "name_en": "💎 Lite", "price": 15, 
-         "daily_limit": 200, "image_send": 20, "image_generate": 3, "video_send": 2},
+         "daily_limit": 200, "image_send": 20, "image_generate": 3, "video_send": 2,
+         "description_ru": "• Gemma 3 4B\n• GPT-OSS-20B\n• Улучшенная скорость",
+         "description_en": "• Gemma 3 4B\n• GPT-OSS-20B\n• Improved speed"},
 
         {"id": "lite_plus", "name": "💎 Lite+", "name_en": "💎 Lite+", "price": 399, 
-         "daily_limit": 350, "image_send": 35, "image_generate": 5, "video_send": 4},
+         "daily_limit": 350, "image_send": 35, "image_generate": 5, "video_send": 4,
+         "description_ru": "• Все модели Lite\n• Gemini 2.0 Flash\n• Мультимодальность",
+         "description_en": "• All Lite models\n• Gemini 2.0 Flash\n• Multimodal"},
          
         {"id": "vip", "name": "⭐ VIP", "name_en": "⭐ VIP", "price": 1499, 
-         "daily_limit": 500, "image_send": 45, "image_generate": 7, "video_send": 7},
+         "daily_limit": 500, "image_send": 45, "image_generate": 7, "video_send": 7,
+         "description_ru": "• Все предыдущие модели\n• Seed 1.6 Flash\n• Видеоанализ",
+         "description_en": "• All previous models\n• Seed 1.6 Flash\n• Video analysis"},
          
         {"id": "vip_plus", "name": "🎨 VIP+", "name_en": "🎨 VIP+", "price": 4999, 
-         "daily_limit": 1000, "image_send": 57, "image_generate": 10, "video_send": 10},
+         "daily_limit": 1000, "image_send": 57, "image_generate": 10, "video_send": 10,
+         "description_ru": "• Все предыдущие модели\n• GPT-5 Image Mini\n• Генерация изображений",
+         "description_en": "• All previous models\n• GPT-5 Image Mini\n• Image generation"},
          
         {"id": "quantum", "name": "🚀 Quantum", "name_en": "🚀 Quantum", "price": 19999, 
-         "daily_limit": 2000, "image_send": 85, "image_generate": 30, "video_send": 15},
+         "daily_limit": 2000, "image_send": 85, "image_generate": 30, "video_send": 15,
+         "description_ru": "• Все предыдущие модели\n• Nano Banana\n• Продвинутая генерация",
+         "description_en": "• All previous models\n• Nano Banana\n• Advanced generation"},
          
         {"id": "quantum_pro", "name": "🔬 Quantum Pro", "name_en": "🔬 Quantum Pro", "price": 49999, 
-         "daily_limit": 5000, "image_send": 210, "image_generate": 60, "video_send": 22},
+         "daily_limit": 5000, "image_send": 210, "image_generate": 60, "video_send": 22,
+         "description_ru": "• Все предыдущие модели\n• GPT-5.2\n• Экспертные задачи",
+         "description_en": "• All previous models\n• GPT-5.2\n• Expert tasks"},
          
         {"id": "quantum_infinite", "name": "🌌 Quantum Infinite", "name_en": "🌌 Quantum Infinite", "price": 149999, 
-         "daily_limit": 9000, "image_send": 350, "image_generate": 85, "video_send": 50},
+         "daily_limit": 9000, "image_send": 350, "image_generate": 85, "video_send": 50,
+         "description_ru": "• Все модели\n• Gemini 3 Pro\n• o1-pro\n• Максимальная мощность",
+         "description_en": "• All models\n• Gemini 3 Pro\n• o1-pro\n• Maximum power"},
     ]
 
     # Monthly token limits for abuse protection
