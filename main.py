@@ -418,7 +418,7 @@ async def handle_generate_command(message: types.Message):
                 )
                 await msg.delete()
             else:
-                await msg.edit_text("✅ <b>Изображение сгенерировано!</b>")
+                await msg.edit_text(f"✅ <b>Изображение сгенерировано!</b>\n\nОтвет модели: {result['response']}")
         elif not result['success']:
             # Улучшенная обработка ошибок
             error_msg = result.get('error', 'Неизвестная ошибка')
@@ -719,13 +719,17 @@ async def handle_referral(message: types.Message):
 👥 Приглашено пользователей: {user['referral_count']}
 
 🔗 <b>Ваша реферальная ссылка:</b>
-https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}""",
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}
+
+💎 Приглашайте друзей!""",
         'en': f"""📤 <b>Referral System</b>
 
 👥 Users invited: {user['referral_count']}
 
 🔗 <b>Your referral link:</b>
-https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}"""
+https://t.me/{(await bot.get_me()).username}?start={user['referral_code']}
+
+💎 Invite friends!"""
     }
     await message.answer(ref_text[lang], reply_markup=get_referral_keyboard(lang))
 
