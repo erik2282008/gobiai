@@ -404,8 +404,8 @@ async def handle_generate_command(message: types.Message):
     active_generations[message.from_user.id] = True
     
     try:
-        # Используем бесплатную Gemma 3 4B для генерации
-        result = await routerai_service.generate_image(prompt, model_id="google/gemma-3-4b-it")
+        # ИСПРАВЛЕНИЕ: Используем специальную модель для генерации изображений
+        result = await routerai_service.generate_image(prompt, model_id=Config.IMAGE_GENERATION_MODEL)
         
         if result['success'] and active_generations.get(message.from_user.id):
             db.update_media_usage(user['user_id'], 'image_generate')
