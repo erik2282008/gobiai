@@ -91,12 +91,21 @@ class RouterAIService:
         if model_id is None:
             model_id = Config.IMAGE_GENERATION_MODEL
         
-        # Используем специальный эндпоинт для генерации изображений
+        # Используем chat/completions с мультимодальной моделью
         payload = {
             "model": model_id,
-            "prompt": prompt,
-            "size": "1024x1024",
-            "num_images": 1
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Сгенерируй изображение: {prompt}. Верни результат в формате base64 изображения."
+                        }
+                    ]
+                }
+            ],
+            "max_tokens": 1000
         }
         
         try:
@@ -104,7 +113,7 @@ class RouterAIService:
             
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
-                    f"{self.base_url}/images/generations",
+                    f"{self.base_url}/chat/completions",
                     json=payload,
                     headers=self.headers
                 ) as response:
@@ -112,26 +121,55 @@ class RouterAIService:
                     if response.status == 200:
                         data = await response.json()
                         
-                        # Обрабатываем ответ с изображением
-                        if "data" in data and len(data["data"]) > 0:
-                            image_url = data["data"][0].get("url")
+                        # Проверяем разные форматы ответа
+                        if "choices" in data and len(data["choices"]) > 0:
+                            choice = data["choices"][0]
                             
-                            if image_url:
-                                # Скачиваем изображение по URL
-                                async with session.get(image_url) as img_response:
-                                    if img_response.status == 200:
-                                        image_data = await img_response.read()
-                                        base64_data = base64.b64encode(image_data).decode('utf-8')
-                                        
+                            if "message" in choice:
+                                message_content = choice["message"].get("content", "")
+                                
+                                # Пытаемся найти base64 изображение в ответе
+                                if isinstance(message_content, str):
+                                    # Ищем base64 данные в тексте
+                                    import base64
+                                    import re
+                                    
+                                    # Паттерн для base64 изображения
+                                    base64_pattern = r'data:image\/[^;]+;base64,([^\"]+)'
+                                    match = re.search(base64_pattern, message_content)
+                                    
+                                    if match:
+                                        base64_data = match.group(1)
                                         return {
                                             "success": True,
                                             "image_data": base64_data,
                                             "response": f"Изображение сгенерировано: {prompt}"
                                         }
+                                    else:
+                                        # Если нет изображения, возвращаем текстовый ответ
+                                        return {
+                                            "success": True,
+                                            "image_data": None,
+                                            "response": message_content
+                                        }
+                                elif isinstance(message_content, list):
+                                    # Мультимодальный ответ
+                                    for item in message_content:
+                                        if isinstance(item, dict) and item.get("type") == "image_url":
+                                            image_url = item.get("image_url", {})
+                                            if isinstance(image_url, dict):
+                                                url = image_url.get("url", "")
+                                                if url.startswith("data:image"):
+                                                    base64_data = url.split(",")[1]
+                                                    return {
+                                                        "success": True,
+                                                        "image_data": base64_data,
+                                                        "response": f"Изображение сгенерировано: {prompt}"
+                                                    }
                         
                         return {
                             "success": False,
-                            "error": "Не удалось сгенерировать изображение"
+                            "error": "Модель не вернула изображение в ожидаемом формате"
                         }
                         
                     else:
