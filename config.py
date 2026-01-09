@@ -10,7 +10,7 @@ class Config:
     ROUTERAI_API_KEY = os.getenv("ROUTERAI_API_KEY", "sk-q3x47IGel2Cv4g-DCxIEf4WNDbQiEAqG")
     ROUTERAI_ENDPOINT = os.getenv("ROUTERAI_ENDPOINT", "https://routerai.ru/api/v1")
     
-    # YooKassa
+    # YooKassa (тестовый режим)
     YUKASSA_SHOP_ID = os.getenv("YUKASSA_SHOP_ID", "1241024")
     YUKASSA_SECRET_KEY = os.getenv("YUKASSA_SECRET_KEY", "test_dovNMVr5Rjt6Ez5W5atO2a1RDpzNKLlQh6dcp-fDpsI")
     
@@ -144,5 +144,3 @@ class Config:
 
     # Referral settings
     REFERRAL_REWARD_DAYS = 10
-
-
