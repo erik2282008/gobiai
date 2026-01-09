@@ -88,33 +88,23 @@ class RouterAIService:
     
     async def generate_image(self, prompt, model_id=None):
         """Генерация изображения через RouterAI"""
-        # ИСПРАВЛЕНИЕ: Используем правильную модель для генерации
         if model_id is None:
             model_id = Config.IMAGE_GENERATION_MODEL
         
-        # Формируем сообщение для генерации изображения
+        # Используем специальный эндпоинт для генерации изображений
         payload = {
             "model": model_id,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"Сгенерируй изображение: {prompt}"
-                        }
-                    ]
-                }
-            ],
-            "stream": False
+            "prompt": prompt,
+            "size": "1024x1024",
+            "num_images": 1
         }
         
         try:
-            timeout = aiohttp.ClientTimeout(total=120)
+            timeout = aiohttp.ClientTimeout(total=180)
             
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
-                    f"{self.base_url}/chat/completions",
+                    f"{self.base_url}/images/generations",
                     json=payload,
                     headers=self.headers
                 ) as response:
@@ -123,60 +113,38 @@ class RouterAIService:
                         data = await response.json()
                         
                         # Обрабатываем ответ с изображением
-                        if "choices" in data and len(data["choices"]) > 0:
-                            choice = data["choices"][0]
+                        if "data" in data and len(data["data"]) > 0:
+                            image_url = data["data"][0].get("url")
                             
-                            # Проверяем разные форматы ответа с изображением
-                            if "message" in choice:
-                                message = choice["message"]
-                                
-                                # Если есть изображение в контенте
-                                if "content" in message:
-                                    content = message["content"]
-                                    
-                                    # Если контент - массив (мультимодальный ответ)
-                                    if isinstance(content, list):
-                                        for item in content:
-                                            if isinstance(item, dict) and item.get("type") == "image":
-                                                # Извлекаем base64 изображение
-                                                image_url = item.get("image_url", {})
-                                                if isinstance(image_url, dict):
-                                                    url = image_url.get("url", "")
-                                                    if url.startswith("data:image"):
-                                                        # Извлекаем base64 данные
-                                                        base64_data = url.split(",")[1]
-                                                        return {
-                                                            "success": True,
-                                                            "image_data": base64_data,
-                                                            "response": f"Изображение сгенерировано: {prompt}"
-                                                        }
-                                    
-                                    # Если контент - текст с описанием изображения
-                                    elif isinstance(content, str):
+                            if image_url:
+                                # Скачиваем изображение по URL
+                                async with session.get(image_url) as img_response:
+                                    if img_response.status == 200:
+                                        image_data = await img_response.read()
+                                        base64_data = base64.b64encode(image_data).decode('utf-8')
+                                        
                                         return {
                                             "success": True,
-                                            "response": content,
-                                            "image_data": None
+                                            "image_data": base64_data,
+                                            "response": f"Изображение сгенерировано: {prompt}"
                                         }
                         
-                        # Если изображение не найдено, возвращаем текстовый ответ
                         return {
-                            "success": True,
-                            "response": f"Модель ответила на запрос генерации изображения: {prompt}\n\nОтвет: {data.get('choices', [{}])[0].get('message', {}).get('content', 'Нет ответа')}",
-                            "image_data": None
+                            "success": False,
+                            "error": "Не удалось сгенерировать изображение"
                         }
                         
                     else:
                         error_text = await response.text()
                         return {
                             "success": False,
-                            "error": f"RouterAI API error: {response.status} - {error_text}"
+                            "error": f"API error: {response.status} - {error_text}"
                         }
                         
         except asyncio.TimeoutError:
             return {
                 "success": False,
-                "error": "Request timeout (120 seconds) for image generation"
+                "error": "Request timeout (180 seconds) for image generation"
             }
         except Exception as e:
             return {
