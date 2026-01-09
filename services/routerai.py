@@ -88,8 +88,9 @@ class RouterAIService:
     
     async def generate_image(self, prompt, model_id=None):
         """Генерация изображения через RouterAI"""
+        # ИСПРАВЛЕНИЕ: Используем правильную модель для генерации
         if model_id is None:
-            model_id = "google/gemini-2.5-flash-image"  # Модель для генерации изображений
+            model_id = Config.IMAGE_GENERATION_MODEL
         
         # Формируем сообщение для генерации изображения
         payload = {
