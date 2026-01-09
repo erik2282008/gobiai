@@ -111,7 +111,7 @@ LEGAL_DOCUMENTS = {
 
 <b>6. МЕСЯЧНЫЕ ЛИМИТЫ ТОКЕНОВ</b>
 6.1. <b>Бесплатный:</b> 15,000 токенов/месяц
-6.2. <b>Литe:</b> 100,000 токенов/месяц
+6.2. <b>Лите:</b> 100,000 токенов/месяц
 6.3. <b>Lite+:</b> 220,000 токенов/месяц
 6.4. <b>VIP:</b> 600,000 токенов/месяц
 6.5. <b>VIP+:</b> 700,000 токенов/месяц
@@ -414,17 +414,27 @@ async def handle_generate_command(message: types.Message):
             db.update_media_usage(user['user_id'], 'image_generate')
             
             if result.get('image_data'):
-                image_data = base64.b64decode(result['image_data'])
-                await message.answer_photo(
-                    types.BufferedInputFile(image_data, filename="generated_image.jpg"),
-                    caption=f"🎨 <b>Сгенерированное изображение</b>\n\nЗапрос: {prompt}"
-                )
-                await msg.delete()
+                try:
+                    image_data = base64.b64decode(result['image_data'])
+                    await message.answer_photo(
+                        types.BufferedInputFile(image_data, filename="generated_image.jpg"),
+                        caption=f"🎨 <b>Сгенерированное изображение</b>\n\nЗапрос: {prompt}"
+                    )
+                    await msg.delete()
+                except Exception as e:
+                    logger.error(f"Image decode error: {e}")
+                    await msg.edit_text("❌ Ошибка декодирования изображения")
             else:
-                await msg.edit_text("❌ Не удалось сгенерировать изображение")
+                await msg.edit_text(f"🤖 <b>Модель ответила:</b>\n\n{result['response']}")
         elif not result['success']:
             error_msg = result.get('error', 'Неизвестная ошибка')
-            await msg.edit_text(f"❌ Ошибка: {error_msg}")
+            if "timeout" in error_msg.lower():
+                error_msg = "⏳ Время генерации истекло. Попробуйте позже."
+            elif "connection" in error_msg.lower():
+                error_msg = "🔌 Ошибка соединения. Проверьте интернет."
+            else:
+                error_msg = f"❌ Ошибка: {error_msg}"
+            await msg.edit_text(error_msg)
             
     except Exception as e:
         logger.error(f"Image generation error: {e}")
@@ -499,11 +509,7 @@ async def handle_photo(message: types.Message):
             db.update_token_usage(message.from_user.id, 500, 1500)
         elif not result['success']:
             error_msg = result.get('error', 'Неизвестная ошибка')
-            if "timeout" in error_msg.lower():
-                error_msg = "⏳ Время обработки истекло."
-            else:
-                error_msg = f"❌ Ошибка: {error_msg}"
-            await msg.edit_text(error_msg)
+            await msg.edit_text(f"❌ Ошибка: {error_msg}")
             
     except Exception as e:
         logger.error(f"Photo processing error: {e}")
