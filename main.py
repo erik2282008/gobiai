@@ -306,13 +306,17 @@ def get_plan_info_text(plan, lang='ru'):
 
 💰 Цена: {plan['price']} руб/месяц
 📅 Срок: 30 дней
-✨ Доступ к премиум моделям"""
+
+<b>Доступные модели:</b>
+{plan['description_ru']}"""
     else:
         return f"""💎 <b>{plan['name_en']}</b>
 
 💰 Price: {plan['price']} RUB/month
 📅 Duration: 30 days
-✨ Access to premium models"""
+
+<b>Available models:</b>
+{plan['description_en']}"""
 
 async def check_payment_status(payment_id, yookassa_id, user_id):
     try:
@@ -370,9 +374,8 @@ async def show_legal_doc(callback: types.CallbackQuery):
 @dp.message(F.text == "🎨 Generate image")
 async def handle_generate_image_menu(message: types.Message):
     user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
+    if not user:
+        user = db.create_user(message.from_user.id, message.from_user.username)
         
     lang = user['language']
     text = {
@@ -383,10 +386,10 @@ async def handle_generate_image_menu(message: types.Message):
 
 @dp.message(F.text.startswith("/generate"))
 async def handle_generate_command(message: types.Message):
+    # Автоматически создаем пользователя если не существует
     user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
+    if not user:
+        user = db.create_user(message.from_user.id, message.from_user.username)
         
     prompt = message.text.replace("/generate", "").strip()
     if not prompt:
@@ -404,7 +407,7 @@ async def handle_generate_command(message: types.Message):
     active_generations[message.from_user.id] = True
     
     try:
-        # ИСПРАВЛЕНИЕ: Используем специальную модель для генерации изображений
+        # Используем специальную модель для генерации изображений
         result = await routerai_service.generate_image(prompt, model_id=Config.IMAGE_GENERATION_MODEL)
         
         if result['success'] and active_generations.get(message.from_user.id):
@@ -418,17 +421,10 @@ async def handle_generate_command(message: types.Message):
                 )
                 await msg.delete()
             else:
-                await msg.edit_text(f"✅ <b>Изображение сгенерировано!</b>\n\nОтвет модели: {result['response']}")
+                await msg.edit_text("❌ Не удалось сгенерировать изображение")
         elif not result['success']:
-            # Улучшенная обработка ошибок
             error_msg = result.get('error', 'Неизвестная ошибка')
-            if "timeout" in error_msg.lower():
-                error_msg = "⏳ Время генерации истекло. Попробуйте позже."
-            elif "generat" in error_msg.lower():
-                error_msg = "🚫 Сервис недоступен. Попробуйте позже."
-            else:
-                error_msg = f"❌ Ошибка генерации: {error_msg}"
-            await msg.edit_text(error_msg)
+            await msg.edit_text(f"❌ Ошибка: {error_msg}")
             
     except Exception as e:
         logger.error(f"Image generation error: {e}")
@@ -440,9 +436,8 @@ async def handle_generate_command(message: types.Message):
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
     user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
+    if not user:
+        user = db.create_user(message.from_user.id, message.from_user.username)
         
     # Проверяем лимиты отправки изображений
     can_send, error_msg = db.can_send_image(user['user_id'])
@@ -519,9 +514,8 @@ async def handle_photo(message: types.Message):
 @dp.message(F.video)
 async def handle_video(message: types.Message):
     user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
+    if not user:
+        user = db.create_user(message.from_user.id, message.from_user.username)
         
     # Проверяем лимиты отправки видео
     can_send, error_msg = db.can_send_video(user['user_id'])
@@ -563,9 +557,8 @@ async def handle_video(message: types.Message):
 @dp.message(F.document)
 async def handle_document(message: types.Message):
     user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
+    if not user:
+        user = db.create_user(message.from_user.id, message.from_user.username)
         
     can_use, error_msg = db.can_use_model(user['user_id'])
     if not can_use: 
@@ -622,9 +615,8 @@ async def cmd_start(message: types.Message):
 @dp.message(F.text == "🧠 Choose model")
 async def handle_models(message: types.Message):
     user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
+    if not user:
+        user = db.create_user(message.from_user.id, message.from_user.username)
         
     lang = user['language']
     await message.answer("🤖 <b>Выберите AI-модель</b>", reply_markup=get_models_keyboard(user['subscription'], lang))
@@ -633,9 +625,8 @@ async def handle_models(message: types.Message):
 @dp.message(F.text == "👤 My profile")
 async def handle_profile(message: types.Message):
     user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
+    if not user:
+        user = db.create_user(message.from_user.id, message.from_user.username)
         
     lang = user['language']
     plan = next((p for p in Config.SUBSCRIPTION_PLANS if p['id'] == user['subscription']), None)
@@ -686,9 +677,8 @@ Videos sent: {user['videos_sent_today']}
 @dp.message(F.text == "💳 Buy subscription")
 async def handle_buy_subscription(message: types.Message):
     user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
+    if not user:
+        user = db.create_user(message.from_user.id, message.from_user.username)
         
     lang = user['language']
     await message.answer("💎 <b>Выберите подписку</b>", reply_markup=get_subscription_keyboard(lang))
@@ -697,9 +687,8 @@ async def handle_buy_subscription(message: types.Message):
 @dp.message(F.text == "🔑 Buy API")
 async def handle_buy_api(message: types.Message):
     user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
+    if not user:
+        user = db.create_user(message.from_user.id, message.from_user.username)
         
     lang = user['language']
     await message.answer("🔑 <b>Купить API-ключ</b>", reply_markup=get_api_key_keyboard(lang))
@@ -708,9 +697,8 @@ async def handle_buy_api(message: types.Message):
 @dp.message(F.text == "📤 Referral")
 async def handle_referral(message: types.Message):
     user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
+    if not user:
+        user = db.create_user(message.from_user.id, message.from_user.username)
         
     lang = user['language']
     ref_text = {
@@ -1004,9 +992,8 @@ async def handle_message(message: types.Message):
         return
     
     user = db.get_user(message.from_user.id)
-    if not user: 
-        await message.answer("❌ Сначала используйте /start")
-        return
+    if not user:
+        user = db.create_user(message.from_user.id, message.from_user.username)
         
     # Проверяем общие лимиты
     can_use, error_msg = db.can_use_model(user['user_id'])
